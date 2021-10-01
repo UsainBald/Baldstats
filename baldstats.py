@@ -118,22 +118,7 @@ while True:
             if lastline[11:30] == '[main/INFO]: [CHAT]':
                 if lastline[31:38] == '§9Party' and '!bald' in lastline:
 
-                    if '!bald add' in lastline:
-                        playeradd = lastline[(lastline.find('!bald add') + 10):-1]
-                        playeradd = checkname(playeradd)
-                        if not playeradd == 'error':
-                            if playeradd not in playerlist:
-                                addplayer(playeradd)
-                            else:
-                                print('ERROR: this player has already been added')
-
-                    elif '!bald kick' in lastline:
-                        playerkick = lastline[(lastline.find('!bald kick') + 11):-1]
-                        playerkick = checkname(playerkick)
-                        if not playerkick == 'error':
-                            removeplayer(playerkick)
-
-                    elif '!bald overall' in lastline:
+                    if '!bald overall' in lastline:
                         overallprint()
 
                     elif '!bald list' in lastline:
