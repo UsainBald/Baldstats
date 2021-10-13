@@ -2,6 +2,7 @@ import time
 import getpass
 import os
 import requests
+from concurrent.futures import ThreadPoolExecutor
 
 user = (getpass.getuser())
 a = '1.8'
@@ -40,8 +41,42 @@ def checkname(ign):
         return 'error'
 
 
+def getstats(name):
+    url = f"https://api.hypixel.net/player?key={API_KEY}&name={i}"
+    req = requests.get(url)
+    req_player = req.get('player')
+    req_displayname = req_player.get('displayname')
+    req_uuid = req_player.get('uuid')
+    req_achievements = req_player.get('achievements')
+    req_bwlevel = req_achievements.get('bedwars_level')
+    req_stats = req_player.get('stats')
+    req_bedwars = req_stats.get('Bedwars')
+    req_finalk = req_bedwars.get('final_kills_bedwars')
+    if req_finalk == None:
+        req_finalk = 0
+    req_finald = req_bedwars.get('final_deaths_bedwars')
+    if req_finald == None:
+        req_finald = 1
+    return [req_displayname, req_finalk, req_finald, req_uuid]
+
+
+def urllist(nicklist):
+    urls = []
+    for i in nicklist:
+        url = f"https://api.hypixel.net/player?key={API_KEY}&name={i}"
+        urls.append(url)
+    return urls
+
+
+def mtrequest(urls):
+    with ThreadPoolExecutor(80) as executor:
+        for url in urls:
+            executor.submit(addplayer, url)
+
+
 def addplayer(newplayer):
-    if not newplayer in playerlist:
+    if newplayer not in playerlist:
+        getstats(newplayer)
         playerlist.append(newplayer)
         nparray = [newplayer, 0, 0]
         totalstats.append(nparray)
@@ -55,13 +90,6 @@ def removeplayer(kickedplayer):
         print(f"{kickedplayer} was removed")
     else:
         print('ERROR: this player is not in the list')
-
-
-def addnick(ign, nick):
-    o = [ign, nick]
-    nickedlist.append(o)
-    nicks.append(nick)
-    nickedplayers.append(ign)
 
 
 def overallprint():
@@ -115,8 +143,8 @@ while True:
         for line in range(currentline, length):
             with open(logfile) as f:
                 lastline = f.readlines()[line]
-            if lastline[11:30] == '[main/INFO]: [CHAT]':
-                if lastline[31:38] == '§9Party' and '!bald' in lastline:
+            if lastline[11:30] == '[Client thread/INFO':
+                if lastline[40:47] == '§9Party' and '!bald' in lastline:
 
                     if '!bald overall' in lastline:
                         overallprint()
@@ -127,32 +155,13 @@ while True:
                         for i in playerlist:
                             print(i)
 
-                    elif '!bald nick' in lastline:
-                        s = lastline.split()
-                        if len(s) == 11:
-                            nickedmvp = checkname(s[9])
-                            if not nickedmvp == 'error':
-                                if nickedmvp in playerlist:
-                                    newplayer = s[10]
-                                    if not newplayer in playerlist:
-                                        playerlist.append(newplayer)
-                                        nparray = [newplayer, 0, 0]
-                                        totalstats.append(nparray)
-                                        addnick(nickedmvp, newplayer)
-                                        print(f"{nickedmvp}'s nick was set to {newplayer}" )
-                                else:
-                                    print(f'{nickedmvp} is not in the current party')
-
                 elif not len(playerlist) == 0:
                     if lastline[-12:-1] == 'FINAL KILL!':
                         for player in playerlist:
                             s = lastline.split()
                             if f'{player}' in lastline:
                                 if not f'{player}' == s[3]:
-                                    if player in nicks:
-                                        a = playerlist.index(f'{nickedplayers[nicks.index(player)]}')
-                                    else:
-                                        a = playerlist.index(f'{player}')
+                                    a = playerlist.index(f'{player}')
                                     totalstats[a][1] += 1
                                     printer(player)
                                 else:
@@ -160,17 +169,8 @@ while True:
                                     printer(player)
 
                 s = lastline.split()
-                if 15 <= len(s) <= 17:  # you invite someone to the party
-                    if s[5] == 'invited' and s[10] == 'party!':
-                        addplayer(s[4])
-                    elif s[5] == 'invited' and s[9] == 'party!':
-                        addplayer(s[4])
-                    elif s[4] == 'invited' and s[9] == 'party!':
-                        addplayer(s[3])
-                    elif s[4] == 'invited' and s[8] == 'party!':
-                        addplayer(s[3])
 
-                elif len(s) == 7:  # player joins the party
+                if len(s) == 7:  # player joins the party
                     if s[4] == 'joined' and s[6] == 'party.':
                         addplayer(s[3])
                 elif len(s) == 8:
@@ -195,6 +195,7 @@ while True:
                     if s[3] == 'You' and s[8] == 'party!':
                         addplayer(s[7][:-2])
                 s2 = lastline.split(':')
+                namelist = []
                 if len(s2) == 5:
                     s = s2[3].split()
                     if len(s) >= 4:
@@ -203,7 +204,10 @@ while True:
                             for m in pl:
                                 n = m.split()
                                 ap = n[-1]
-                                addplayer(ap)
+                                namelist.append(ap)
+                                requrls = urllist(namelist)
+                                mtrequest(requrls)
+
                 if len(s) == 16:
                     if s[4] == 'party' and s[6] == 'disbanded':
                         if not len(playerlist) == 1:
