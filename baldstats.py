@@ -30,7 +30,7 @@ def checkname(ign):
     url = f"https://api.hypixel.net/player?key={API_KEY}&name={ign}"
     req = requests.get(url).json()
     player = req.get('player')
-    if not player == None:
+    if player != None:
         displayname = player.get("displayname")
         return displayname
     else:
@@ -38,7 +38,7 @@ def checkname(ign):
             print('API request error, try again in a moment')
         else:
             print(f'ERROR: no player by the name of {ign} found')
-        return 'error'
+        return ""
 
 
 def getstats(name):
@@ -100,9 +100,12 @@ def overallprint():
         if fdc == 0:
             fdc = 1
         print(' ')
-        print(f"{i[0]}'s fkdr =", round(totalstats[playerlist.index(f'{i[0]}')][1] / fdc, 2))
-        print(f"{i[0]}'s final kills =", totalstats[playerlist.index(f'{i[0]}')][1])
-        print(f"{i[0]}'s final deaths =", totalstats[playerlist.index(f'{i[0]}')][2])
+        print(f"{i[0]}'s fkdr =", round(
+            totalstats[playerlist.index(f'{i[0]}')][1] / fdc, 2))
+        print(f"{i[0]}'s final kills =",
+              totalstats[playerlist.index(f'{i[0]}')][1])
+        print(f"{i[0]}'s final deaths =",
+              totalstats[playerlist.index(f'{i[0]}')][2])
 
 
 ignnotentered = True
@@ -110,16 +113,18 @@ if not os.path.exists(cfgfile):
     while ignnotentered:
         ign = input('Enter your minecraft ign\n')
         ign = checkname(ign)
-        if not ign == 'error':
+        if ign != "":
             os.mkdir(r"C:\Users" + f"\{user}\Appdata\Roaming\Baldstats")
             with open(cfgfile, 'w') as cfg:
                 cfg.write(f'Name = {ign}')
                 ignnotentered = False
+
 with open(cfgfile) as cfg:
     for cfgline in cfg:
         s = cfgline.split()
         addplayer(s[2])
         cfgplayer = s[2]
+
 print(' ')
 print('USAGE:\n')
 print('All the commands need to be typed in the party chat in order for them to work')
@@ -143,9 +148,9 @@ while True:
         for line in range(currentline, length):
             with open(logfile) as f:
                 lastline = f.readlines()[line]
+            logfile_lastchanged = os.stat(logfile).st_mtime
             if lastline[11:30] == '[Client thread/INFO':
                 if lastline[40:47] == '§9Party' and '!bald' in lastline:
-
                     if '!bald overall' in lastline:
                         overallprint()
 
@@ -155,45 +160,52 @@ while True:
                         for i in playerlist:
                             print(i)
 
-                elif not len(playerlist) == 0:
+                elif len(playerlist) != 0:
                     if lastline[-12:-1] == 'FINAL KILL!':
                         for player in playerlist:
                             s = lastline.split()
                             if f'{player}' in lastline:
-                                if not f'{player}' == s[3]:
+                                if f'{player}' != s[3]:
                                     a = playerlist.index(f'{player}')
                                     totalstats[a][1] += 1
                                     printer(player)
                                 else:
-                                    totalstats[playerlist.index(f'{player}')][2] += 1
+                                    totalstats[playerlist.index(
+                                        f'{player}')][2] += 1
                                     printer(player)
 
                 s = lastline.split()
 
-                if len(s) == 7:  # player joins the party
+                # player joins the party
+                if len(s) == 7:
                     if s[4] == 'joined' and s[6] == 'party.':
                         addplayer(s[3])
                 elif len(s) == 8:
                     if s[5] == 'joined' and s[6] == 'the' and s[7] == 'party.':
                         addplayer(s[4])
 
-                if 8 <= len(s) <= 9:  # player leaves the party
+                # player leaves the party
+                if 8 <= len(s) <= 9:
                     if s[5] == 'left' and s[7] == 'party.':
                         removeplayer(s[3])
                     elif s[6] == 'left' and s[7] == 'the':
                         removeplayer(s[4])
 
-                elif 10 <= len(s) <= 11:  # player gets removed from the party
+                # player gets removed from the party
+                elif 10 <= len(s) <= 11:
                     if s[4] == 'has' and s[6] == 'removed':
                         removeplayer(s[3])
                     elif s[5] == 'has' and s[7] == 'removed':
                         removeplayer(s[4])
-                if len(s) == 8:  # you join someone else's party
+
+                # you join someone else's party
+                if len(s) == 8:
                     if s[3] == 'You' and s[7] == 'party!':
                         addplayer(s[6][:-2])
                 elif len(s) == 9:
                     if s[3] == 'You' and s[8] == 'party!':
                         addplayer(s[7][:-2])
+
                 s2 = lastline.split(':')
                 namelist = []
                 if len(s2) == 5:
@@ -208,31 +220,23 @@ while True:
                                 requrls = urllist(namelist)
                                 mtrequest(requrls)
 
-                if len(s) == 16:
+                if len(s) == 12 or len(s) == 16:
                     if s[4] == 'party' and s[6] == 'disbanded':
-                        if not len(playerlist) == 1:
+                        if len(playerlist) != 1:
                             for i in playerlist:
-                                if not i == cfgplayer:
+                                if i != cfgplayer:
                                     removeplayer(i)
                             print('The party was disbanded')
                             overallprint()
-                elif len(s) == 12:
-                    if s[4] == 'party' and s[6] == 'disbanded':
-                        if not len(playerlist) == 1:
-                            for i in playerlist:
-                                if not i == cfgplayer:
-                                    removeplayer(i)
-                            print('The party was disbanded')
-                            overallprint()
+
                 if len(s) == 7:
                     if s[3] == 'You' and s[4] == 'left':
                         for i in playerlist:
-                            if not i == cfgplayer:
+                            if i != cfgplayer:
                                 removeplayer(i)
-                        print('you left the party')
+                        print('You left the party')
                         overallprint()
             currentline = line + 1
 
-        logfile_lastchanged = os.stat(logfile).st_mtime
     else:
         time.sleep(0.02)
