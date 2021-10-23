@@ -41,10 +41,7 @@ def checkname(ign):
         return 'error'
 
 
-def getstats(name):
-    url = f"https://api.hypixel.net/player?key={API_KEY}&name={i}"
-    req = requests.get(url)
-    req_player = req.get('player')
+def getbwstats(req_player):
     req_displayname = req_player.get('displayname')
     req_uuid = req_player.get('uuid')
     req_achievements = req_player.get('achievements')
@@ -57,7 +54,18 @@ def getstats(name):
     req_finald = req_bedwars.get('final_deaths_bedwars')
     if req_finald == None:
         req_finald = 1
-    return [req_displayname, req_finalk, req_finald, req_uuid]
+    return [req_displayname, req_bwlevel, req_finalk, req_finald, req_uuid]
+
+
+def getstats(name):
+    url = f"https://api.hypixel.net/player?key={API_KEY}&name={name}"
+    req = requests.get(url).json()
+    req_player = req.get('player')
+    if not req_player == None:
+        a = getbwstats(req_player)
+        return a
+    else:
+        pass    # надо добавить запрос по uuid
 
 
 def urllist(nicklist):
@@ -68,18 +76,17 @@ def urllist(nicklist):
     return urls
 
 
-def mtrequest(urls):
+def mtrequest(names):
     with ThreadPoolExecutor(80) as executor:
-        for url in urls:
-            executor.submit(addplayer, url)
+        for name in names:
+            executor.submit(addplayer, name)
 
 
 def addplayer(newplayer):
     if newplayer not in playerlist:
-        getstats(newplayer)
+        a = getstats(newplayer)
         playerlist.append(newplayer)
-        nparray = [newplayer, 0, 0]
-        totalstats.append(nparray)
+        totalstats.append(a)
         print(f'{newplayer} was added')
 
 
@@ -205,8 +212,7 @@ while True:
                                 n = m.split()
                                 ap = n[-1]
                                 namelist.append(ap)
-                                requrls = urllist(namelist)
-                                mtrequest(requrls)
+                            mtrequest(namelist)
 
                 if len(s) == 16:
                     if s[4] == 'party' and s[6] == 'disbanded':
