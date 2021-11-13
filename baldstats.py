@@ -3,6 +3,7 @@ import getpass
 import os
 import requests
 from concurrent.futures import ThreadPoolExecutor
+import numpy as np
 
 user = (getpass.getuser())
 a = '1.8'
@@ -30,7 +31,7 @@ def checkname(ign):
     url = f"https://api.hypixel.net/player?key={API_KEY}&name={ign}"
     req = requests.get(url).json()
     player = req.get('player')
-    if player != None:
+    if player is not None:
         displayname = player.get("displayname")
         return displayname
     else:
@@ -49,10 +50,10 @@ def getbwstats(req_player):
     req_stats = req_player.get('stats')
     req_bedwars = req_stats.get('Bedwars')
     req_finalk = req_bedwars.get('final_kills_bedwars')
-    if req_finalk == None:
+    if req_finalk is None:
         req_finalk = 0
     req_finald = req_bedwars.get('final_deaths_bedwars')
-    if req_finald == None:
+    if req_finald is None:
         req_finald = 1
     return [req_displayname, req_bwlevel, req_finalk, req_finald, req_uuid]
 
@@ -61,11 +62,21 @@ def getstats(name):
     url = f"https://api.hypixel.net/player?key={API_KEY}&name={name}"
     req = requests.get(url).json()
     req_player = req.get('player')
-    if not req_player == None:
+    if req_player is not None:
         a = getbwstats(req_player)
         return a
     else:
-        pass    # надо добавить запрос по uuid
+        try:
+            ind = playerlist.index(name)
+        except ValueError:
+            pass
+        uuid_req = totalstats[ind][4]
+        url = f"https://api.hypixel.net/player?key={API_KEY}&uuid={name}"
+        req = requests.get(url).json()
+        req_player = req.get('player')
+        if req_player is not None:
+            a = getbwstats(req_player)
+            return a
 
 
 def urllist(nicklist):
@@ -98,6 +109,10 @@ def removeplayer(kickedplayer):
     else:
         print('ERROR: this player is not in the list')
 
+
+def disbandparty():
+    a = totalstats[0]
+    totalstats = [a]
 
 def overallprint():
     print(' ')
@@ -156,93 +171,80 @@ while True:
             with open(logfile) as f:
                 lastline = f.readlines()[line]
             logfile_lastchanged = os.stat(logfile).st_mtime
-            if lastline[11:30] == '[Client thread/INFO':
-                if lastline[40:47] == '§9Party' and '!bald' in lastline:
-                    if '!bald overall' in lastline:
-                        overallprint()
+            currentline = line + 1
+            if lastline[11:30] != '[Client thread/INFO':
+                break
+            if lastline[40:47] == '§9Party' and '!bald' in lastline:  # legacy code
+                if '!bald overall' in lastline:
+                    overallprint()
 
-                    elif '!bald list' in lastline:
-                        print(' ')
-                        print('Playerlist:')
-                        for i in playerlist:
-                            print(i)
+                elif '!bald list' in lastline:
+                    print(' ')
+                    print('Playerlist:')
+                    for i in playerlist:
+                        print(i)                                      # not legacy anymore
 
-                elif len(playerlist) != 0:
-                    if lastline[-12:-1] == 'FINAL KILL!':
-                        for player in playerlist:
-                            s = lastline.split()
-                            if f'{player}' in lastline:
-                                if f'{player}' != s[3]:
-                                    a = playerlist.index(f'{player}')
-                                    totalstats[a][1] += 1
-                                    printer(player)
-                                else:
-                                    totalstats[playerlist.index(
-                                        f'{player}')][2] += 1
-                                    printer(player)
+            s = lastline.split()
 
-                s = lastline.split()
+            if len(playerlist) != 0:
+                if lastline[-12:-1] == 'FINAL KILL!':
+                    for player in playerlist:
+                        if f'{player}' in lastline:
+                            if f'{player}' != s[3]:
+                                a = playerlist.index(f'{player}')
+                                totalstats[a][1] += 1
+                                printer(player)
+                            else:
+                                totalstats[playerlist.index(
+                                    f'{player}')][2] += 1
+                                printer(player)
 
+            _s = s[3:]
+            for i in _s:
+                if i[0] != '[' and i[-1] != ']':
+                    s.append(i)
+
+            if len(s) == 4:
                 # player joins the party
-                if len(s) == 7:
-                    if s[4] == 'joined' and s[6] == 'party.':
-                        addplayer(s[3])
-                elif len(s) == 8:
-                    if s[5] == 'joined' and s[6] == 'the' and s[7] == 'party.':
-                        addplayer(s[4])
+                if s[1] == 'joined' and s[3] == 'party.':
+                    addplayer(s[0])
+                # you leave the party
+                if s[0] == 'You' and s[1] == 'left':
+                    disbandparty()
 
+            if len(s) == 5:
                 # player leaves the party
-                if 8 <= len(s) <= 9:
-                    if s[5] == 'left' and s[7] == 'party.':
-                        removeplayer(s[3])
-                    elif s[6] == 'left' and s[7] == 'the':
-                        removeplayer(s[4])
+                if s[2] == 'left' and s[4] == 'party.':
+                    removeplayer(s[0])
+                # you joined someone else's party
+                elif s[0] == 'You' and s[3] == 'party!':
+                    addplayer(s[2][:-2])
+                # someone disbands the party
+                elif s[1] == 'has' and s[2] == 'disbanded':
+                    disbandparty()
 
+            if len(s) == 7:
                 # player gets removed from the party
-                elif 10 <= len(s) <= 11:
-                    if s[4] == 'has' and s[6] == 'removed':
-                        removeplayer(s[3])
-                    elif s[5] == 'has' and s[7] == 'removed':
-                        removeplayer(s[4])
+                if s[1] == 'has' and s[3] == 'removed':
+                    removeplayer(s[0])
 
-                # you join someone else's party
-                if len(s) == 8:
-                    if s[3] == 'You' and s[7] == 'party!':
-                        addplayer(s[6][:-2])
-                elif len(s) == 9:
-                    if s[3] == 'You' and s[8] == 'party!':
-                        addplayer(s[7][:-2])
+            if len(s) == 14:
+                # the party gets disbanded
+                if s[1] == 'party' and s[3] == 'disbanded':
+                    disbandparty()
 
+            if s[0] == "You'll":
                 s2 = lastline.split(':')
                 namelist = []
-                if len(s2) == 5:
-                    s = s2[3].split()
-                    if len(s) >= 4:
-                        if s[1] == "You'll":
-                            pl = s2[4].split(',')
-                            for m in pl:
-                                n = m.split()
-                                ap = n[-1]
-                                namelist.append(ap)
-                            mtrequest(namelist)
-
-                if len(s) == 12 or len(s) == 16:
-                    if s[4] == 'party' and s[6] == 'disbanded':
-                        if len(playerlist) != 1:
-                            for i in playerlist:
-                                if i != cfgplayer:
-                                    removeplayer(i)
-                            print('The party was disbanded')
-                            overallprint()
-
-                if len(s) == 7:
-                    if s[3] == 'You' and s[4] == 'left':
-                        for i in playerlist:
-                            if i != cfgplayer:
-                                removeplayer(i)
-                        print('You left the party')
-                        overallprint()
-            currentline = line + 1
+                s = s2[3].split()
+                if len(s) >= 4:
+                    if s[1] == "You'll":
+                        pl = s2[4].split(',')
+                        for m in pl:
+                            n = m.split()
+                            ap = n[-1]
+                            namelist.append(ap)
+                        mtrequest(namelist)
 
     else:
-        time.sleep(0.02)
+        time.sleep(0.01)
