@@ -3,11 +3,8 @@ import getpass
 import os
 import requests
 from concurrent.futures import ThreadPoolExecutor
-import numpy as np
 
 user = (getpass.getuser())
-a = '1.8'
-logfile = r"C:\Users" + f"\{user}\.lunarclient\offline\{a}\logs\latest.log"
 cfgfile = r"C:\Users" + f"\{user}\Appdata\Roaming\Baldstats\cfg.txt"
 API_KEY = "f57c9f4a-175b-430c-a261-d8c199abd927"
 playerlist = []
@@ -110,10 +107,6 @@ def removeplayer(kickedplayer):
         print('ERROR: this player is not in the list')
 
 
-def disbandparty():
-    a = totalstats[0]
-    totalstats = [a]
-
 def overallprint():
     print(' ')
     print('OVERALL STATS:')
@@ -130,13 +123,26 @@ def overallprint():
               totalstats[playerlist.index(f'{i[0]}')][2])
 
 
+def checkclient():
+    edit_lastchanged = 0
+    for i in clientlist:
+        if os.path.exists(i):
+            if os.stat(i).st_mtime > edit_lastchanged:
+                edit_lastchanged = os.stat(i).st_mtime
+                client = i
+    try:
+        return client
+    except Exception:
+        print("You don't have minecraft installed")
+
+
 ignnotentered = True
 if not os.path.exists(cfgfile):
     while ignnotentered:
         ign = input('Enter your minecraft ign\n')
         ign = checkname(ign)
         if ign != "":
-            os.mkdir(r"C:\Users" + f"\{user}\Appdata\Roaming\Baldstats")
+            os.mkdir(f"C:\Users\{user}\Appdata\Roaming\Baldstats")
             with open(cfgfile, 'w') as cfg:
                 cfg.write(f'Name = {ign}')
                 ignnotentered = False
@@ -147,16 +153,16 @@ with open(cfgfile) as cfg:
         addplayer(s[2])
         cfgplayer = s[2]
 
-print(' ')
-print('USAGE:\n')
-print('All the commands need to be typed in the party chat in order for them to work')
-print('!bald *argument*     Example: !bald add Usain_Bald\n')
-print('argument list:')
-print('add *nickname*  - adds a new player')
-print('kick *nickname*  - removes a player')
-print('overall  - prints session stats of everyone')
-print('list  - prints current playerlist\n')
-print('Playerlist:')
+a = '1.8'
+blclient = 'blclient'
+lunar_client = f"C:\Users\{user}\.lunarclient\offline\{a}\logs\latest.log"
+minecraft_client = f"C:\Users\{user}\AppData\Roaming\.minecraft\logs\latest.log"
+badlion_client = f"C:\Users\{user}\AppData\Roaming\.minecraft\logs\{blclient}\chat\latest.log"
+pvplounge_client = f"C:\Users\{user}\AppData\.pvplounge\logs\latest.log"
+clientlist = [lunar_client, minecraft_client, badlion_client, pvplounge_client]
+
+logfile = checkclient()
+
 for i in playerlist:
     print(i)
 
@@ -210,7 +216,7 @@ while True:
                     addplayer(s[0])
                 # you leave the party
                 if s[0] == 'You' and s[1] == 'left':
-                    disbandparty()
+                    totalstats = totalstats[0]
 
             if len(s) == 5:
                 # player leaves the party
@@ -221,7 +227,7 @@ while True:
                     addplayer(s[2][:-2])
                 # someone disbands the party
                 elif s[1] == 'has' and s[2] == 'disbanded':
-                    disbandparty()
+                    totalstats = totalstats[0]
 
             if len(s) == 7:
                 # player gets removed from the party
@@ -231,7 +237,7 @@ while True:
             if len(s) == 14:
                 # the party gets disbanded
                 if s[1] == 'party' and s[3] == 'disbanded':
-                    disbandparty()
+                    totalstats = totalstats[0]
 
             if s[0] == "You'll":
                 s2 = lastline.split(':')
