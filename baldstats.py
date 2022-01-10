@@ -3,9 +3,10 @@ import getpass
 import os
 import requests
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
 
 user = (getpass.getuser())
-cfgfile = r"C:\Users" + f"\{user}\Appdata\Roaming\Baldstats\cfg.txt"
+cfgfile = r"C:/Users" + f"/{user}/Appdata/Roaming/Baldstats/cfg.txt"
 API_KEY = "f57c9f4a-175b-430c-a261-d8c199abd927"
 playerlist = []
 totalstats = []
@@ -68,7 +69,7 @@ def getstats(name):
         except ValueError:
             pass
         uuid_req = totalstats[ind][4]
-        url = f"https://api.hypixel.net/player?key={API_KEY}&uuid={name}"
+        url = f"https://api.hypixel.net/player?key={API_KEY}&uuid={uuid_req}"
         req = requests.get(url).json()
         req_player = req.get('player')
         if req_player is not None:
@@ -104,7 +105,7 @@ def removeplayer(kickedplayer):
         del playerlist[playerlist.index(kickedplayer)]
         print(f"{kickedplayer} was removed")
     else:
-        print('ERROR: this player is not in the list')
+        print(f'ERROR: {kickedplayer} is not in the list')
 
 
 def overallprint():
@@ -136,32 +137,78 @@ def checkclient():
         print("You don't have minecraft installed")
 
 
+def choosemode():
+    global baldstatsmode
+    baldstatsmode = False
+    with open(cfgfile) as cfg:
+        for cfgline in cfg:
+            s = cfgline.split('=')
+            if s[0] == 'RememberMode':
+                if s[1] == 'logfile':
+                    baldstatsmode = 'logfile'
+                elif s[1] == 'api':
+                    baldstatsmode = 'api'
+    if not baldstatsmode:
+        print('CHOOSE BALDSTATS MODE')
+        print('Type 1 to get stats from the log file (updates in real time, unable to track stats of nicked players')
+        print('Type 2 to get stats from the API (updates once every 30 seconds, tracks stats of nicked players')
+        m = int(input())
+        if m == 1:
+            baldstatsmode = 'logfile'
+        elif m == 2:
+            baldstatsmode = 'api'
+        else:
+            raise SystemError
+
+
+def remembermode():
+    if not baldstatsmode:
+        print('Do you want to remember your choice?')
+        print('y - yes')
+        print('n - no')
+        m = input()
+        if m == 'y':
+            with open(cfgfile, 'w') as cfg:
+                cfg.write(f'RememberMode={baldstatsmode}\n')
+
+
+def getAPIkey():
+    print('Enter your hypixel API key (you can get it by using /api new on the server)')
+    APIkey = input()
+    # need to check whether the api key is valid or not and write it in to a cfg file if it is
+
+
 ignnotentered = True
 if not os.path.exists(cfgfile):
     while ignnotentered:
-        ign = input('Enter your minecraft ign\n')
+        ign = input('Enter your minecraft nickname\n')
         ign = checkname(ign)
         if ign != "":
-            os.mkdir(f"C:\Users\{user}\Appdata\Roaming\Baldstats")
+            os.mkdir(f"C:/Users/{user}/Appdata/Roaming/Baldstats")
             with open(cfgfile, 'w') as cfg:
-                cfg.write(f'Name = {ign}')
+                cfg.write(f'Name={ign}\n')
                 ignnotentered = False
 
 with open(cfgfile) as cfg:
     for cfgline in cfg:
-        s = cfgline.split()
-        addplayer(s[2])
-        cfgplayer = s[2]
+        s = cfgline.split('=')
+        if s[0] == 'Name':
+            addplayer(s[1])
+            cfgplayer = s[1]
 
 a = '1.8'
 blclient = 'blclient'
-lunar_client = f"C:\Users\{user}\.lunarclient\offline\{a}\logs\latest.log"
-minecraft_client = f"C:\Users\{user}\AppData\Roaming\.minecraft\logs\latest.log"
-badlion_client = f"C:\Users\{user}\AppData\Roaming\.minecraft\logs\{blclient}\chat\latest.log"
-pvplounge_client = f"C:\Users\{user}\AppData\.pvplounge\logs\latest.log"
+lunar_client = f"C:/Users/{user}/.lunarclient/offline/{a}/logs/latest.log"
+minecraft_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/latest.log"
+badlion_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/{blclient}/chat/latest.log"
+pvplounge_client = f"C:/Users/{user}/AppData/.pvplounge/logs/latest.log"
 clientlist = [lunar_client, minecraft_client, badlion_client, pvplounge_client]
 
 logfile = checkclient()
+
+choosemode()
+remembermode()
+getAPIkey()
 
 for i in playerlist:
     print(i)
@@ -180,15 +227,6 @@ while True:
             currentline = line + 1
             if lastline[11:30] != '[Client thread/INFO':
                 break
-            if lastline[40:47] == '§9Party' and '!bald' in lastline:  # legacy code
-                if '!bald overall' in lastline:
-                    overallprint()
-
-                elif '!bald list' in lastline:
-                    print(' ')
-                    print('Playerlist:')
-                    for i in playerlist:
-                        print(i)                                      # not legacy anymore
 
             s = lastline.split()
 
