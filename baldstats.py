@@ -6,18 +6,22 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
 user = (getpass.getuser())
-cfgfile = r"C:/Users" + f"/{user}/Appdata/Roaming/Baldstats/cfg.txt"
-API_KEY = "f57c9f4a-175b-430c-a261-d8c199abd927"
+cfgfile = f"C:/Users/{user}/Appdata/Roaming/Baldstats/settings.cfg"
+statsfile = f"C:/Users/{user}/Appdata/Roaming/Baldstats/session_stats.txt"
+# APIkey = "f57c9f4a-175b-430c-a261-d8c199abd927"
 playerlist = []
 totalstats = []
-nicks = []
-nickedplayers = []
-nickedlist = []
 logfile_lastchanged = 0
 currentline = 0
+cd = 0
+session_starttime = ''
+stats_before = []
+APIkey = ''
+baldstatsmode = ''
+session_isstarted = False
 
 
-def printer(currentplayer):
+def printer(currentplayer):  # nado ubrat' kogda gui budet
     fdc = totalstats[playerlist.index(f'{currentplayer}')][2]
     if fdc == 0:
         fdc = 1
@@ -25,8 +29,19 @@ def printer(currentplayer):
           (totalstats[playerlist.index(f'{currentplayer}')][1] / fdc, 2))
 
 
+def overallprint():  # nado ubrat' kogda gui budet
+    for i in totalstats:
+        fdc = totalstats[playerlist.index(f'{i[0]}')][3]
+        if fdc == 0:
+            fdc = 1
+        print(' ')
+        print(f"{i[0]}'s fkdr =", round(totalstats[playerlist.index(f'{i[0]}')][2] / fdc, 2))
+        print(f"{i[0]}'s final kills =", totalstats[playerlist.index(f'{i[0]}')][3])
+        print(f"{i[0]}'s final deaths =", totalstats[playerlist.index(f'{i[0]}')][3])
+
+
 def checkname(ign):
-    url = f"https://api.hypixel.net/player?key={API_KEY}&name={ign}"
+    url = f"https://api.hypixel.net/player?key={APIkey}&name={ign}"
     req = requests.get(url).json()
     player = req.get('player')
     if player is not None:
@@ -57,7 +72,7 @@ def getbwstats(req_player):
 
 
 def getstats(name):
-    url = f"https://api.hypixel.net/player?key={API_KEY}&name={name}"
+    url = f"https://api.hypixel.net/player?key={APIkey}&name={name}"
     req = requests.get(url).json()
     req_player = req.get('player')
     if req_player is not None:
@@ -66,21 +81,21 @@ def getstats(name):
     else:
         try:
             ind = playerlist.index(name)
+            uuid_req = totalstats[ind][4]
+            url = f"https://api.hypixel.net/player?key={APIkey}&uuid={uuid_req}"
+            req = requests.get(url).json()
+            req_player = req.get('player')
+            if req_player is not None:
+                a = getbwstats(req_player)
+                return a
         except ValueError:
             pass
-        uuid_req = totalstats[ind][4]
-        url = f"https://api.hypixel.net/player?key={API_KEY}&uuid={uuid_req}"
-        req = requests.get(url).json()
-        req_player = req.get('player')
-        if req_player is not None:
-            a = getbwstats(req_player)
-            return a
 
 
 def urllist(nicklist):
     urls = []
     for i in nicklist:
-        url = f"https://api.hypixel.net/player?key={API_KEY}&name={i}"
+        url = f"https://api.hypixel.net/player?key={APIkey}&name={i}"
         urls.append(url)
     return urls
 
@@ -96,6 +111,8 @@ def addplayer(newplayer):
         a = getstats(newplayer)
         playerlist.append(newplayer)
         totalstats.append(a)
+        if session_isstarted:
+            stats_before.append(a)
         print(f'{newplayer} was added')
 
 
@@ -108,32 +125,17 @@ def removeplayer(kickedplayer):
         print(f'ERROR: {kickedplayer} is not in the list')
 
 
-def overallprint():
-    print(' ')
-    print('OVERALL STATS:')
-    for i in totalstats:
-        fdc = totalstats[playerlist.index(f'{i[0]}')][2]
-        if fdc == 0:
-            fdc = 1
-        print(' ')
-        print(f"{i[0]}'s fkdr =", round(
-            totalstats[playerlist.index(f'{i[0]}')][1] / fdc, 2))
-        print(f"{i[0]}'s final kills =",
-              totalstats[playerlist.index(f'{i[0]}')][1])
-        print(f"{i[0]}'s final deaths =",
-              totalstats[playerlist.index(f'{i[0]}')][2])
-
-
 def checkclient():
+    client = 0
     edit_lastchanged = 0
     for i in clientlist:
         if os.path.exists(i):
             if os.stat(i).st_mtime > edit_lastchanged:
                 edit_lastchanged = os.stat(i).st_mtime
                 client = i
-    try:
+    if client != 0:
         return client
-    except Exception:
+    else:
         print("You don't have minecraft installed")
 
 
@@ -172,11 +174,43 @@ def remembermode():
                 cfg.write(f'RememberMode={baldstatsmode}\n')
 
 
-def getAPIkey():
-    print('Enter your hypixel API key (you can get it by using /api new on the server)')
-    APIkey = input()
-    # need to check whether the api key is valid or not and write it in to a cfg file if it is
+def get_api_key():
+    global APIkey
+    apikey = False
+    with open(cfgfile) as cfg:
+        for cfgline in cfg:
+            s = cfgline.split('=')
+            if s[0] == 'API_KEY':
+                APIkey = s[1]
+    if not apikey:
+        print('Enter your hypixel API key (you can get it by using /api new on the server)')
+        while True:
+            APIkey = input()
+            req_link = f'https://api.hypixel.net/player?key={APIkey}'
+            if requests.get(req_link) == '{"success":false,"cause":"Invalid API key"}':
+                print('Invalid API key, try again')
+            else:
+                with open(cfgfile, 'w') as cfg:
+                    cfg.write(f'API_KEY={APIkey}\n')
+                break
 
+
+def startsession():
+    global session_starttime
+    global stats_before
+    global session_isstarted
+    session_starttime = str(datetime.now())[:16]
+    stats_before = totalstats
+    session_isstarted = True
+
+
+def endsession():
+    global session_isstarted
+    session_isstarted = False
+    pass
+
+
+get_api_key()
 
 ignnotentered = True
 if not os.path.exists(cfgfile):
@@ -196,19 +230,26 @@ with open(cfgfile) as cfg:
             addplayer(s[1])
             cfgplayer = s[1]
 
-a = '1.8'
-blclient = 'blclient'
-lunar_client = f"C:/Users/{user}/.lunarclient/offline/{a}/logs/latest.log"
+lunar_client = f"C:/Users/{user}/.lunarclient/offline/1.8/logs/latest.log"
 minecraft_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/latest.log"
-badlion_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/{blclient}/chat/latest.log"
+badlion_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/blclient/chat/latest.log"
 pvplounge_client = f"C:/Users/{user}/AppData/.pvplounge/logs/latest.log"
 clientlist = [lunar_client, minecraft_client, badlion_client, pvplounge_client]
 
 logfile = checkclient()
 
+if logfile == badlion_client:
+    print('Linked to Badlion Client')
+elif logfile == minecraft_client:
+    print('Linked to the Official Launcher')
+elif logfile == lunar_client:
+    print('Linked to Lunar Client')
+elif logfile == pvplounge_client:
+    print('Linked to PVPLounge Client')
+
 choosemode()
 remembermode()
-getAPIkey()
+startsession()
 
 for i in playerlist:
     print(i)
@@ -289,6 +330,22 @@ while True:
                             ap = n[-1]
                             namelist.append(ap)
                         mtrequest(namelist)
+            if baldstatsmode == 'logfile':
+                if lastline[-12:-1] == 'FINAL KILL!':
+                    for player in playerlist:
+                        s = lastline.split()
+                        if f'{player}' in lastline:
+                            if not f'{player}' == s[3]:
+                                a = playerlist.index(f'{player}')
+                                totalstats[a][2] += 1
+                            else:
+                                totalstats[playerlist.index(f'{player}')][3] += 1
+                            overallprint()
+            elif baldstatsmode == 'api':
+                if cd <= time.time() - 30:
+                    cd = time.time()
+                    for i in playerlist:
+                        getstats(i)
 
     else:
         time.sleep(0.01)
