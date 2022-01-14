@@ -18,7 +18,11 @@ session_starttime = ''
 stats_before = []
 APIkey = ''
 baldstatsmode = ''
+mode_remembered = False
 session_isstarted = False
+
+if not os.path.exists(f"C:/Users/{user}/Appdata/Roaming/Baldstats"):
+    os.mkdir(f"C:/Users/{user}/Appdata/Roaming/Baldstats")
 
 
 def printer(currentplayer):  # nado ubrat' kogda gui budet
@@ -30,14 +34,19 @@ def printer(currentplayer):  # nado ubrat' kogda gui budet
 
 
 def overallprint():  # nado ubrat' kogda gui budet
-    for i in totalstats:
-        fdc = totalstats[playerlist.index(f'{i[0]}')][3]
-        if fdc == 0:
-            fdc = 1
+    for curplayer in totalstats:
+        session_displayname = curplayer[0]
+        session_bwlevel = totalstats[1] - stats_before[1]
+        session_xpprogress = totalstats[5] - stats_before[5]
+        session_finalk = totalstats[2] - stats_before[2]
+        session_finald = totalstats[3] - stats_before[3]
+        if session_finald == 0:
+            session_finald = 1
         print(' ')
-        print(f"{i[0]}'s fkdr =", round(totalstats[playerlist.index(f'{i[0]}')][2] / fdc, 2))
-        print(f"{i[0]}'s final kills =", totalstats[playerlist.index(f'{i[0]}')][3])
-        print(f"{i[0]}'s final deaths =", totalstats[playerlist.index(f'{i[0]}')][3])
+        if baldstatsmode == 'api':
+            print(f"{session_displayname}'s level progress =", session_xpprogress)
+        print(f"{session_displayname}'s fkdr =", round(session_finalk / session_finald, 2))
+        print(f"{session_displayname}'s final kills =", session_finalk)
 
 
 def checkname(ign):
@@ -46,7 +55,8 @@ def checkname(ign):
     player = req.get('player')
     if player is not None:
         displayname = player.get("displayname")
-        return displayname
+        uuid = player.get("uuid")
+        return [displayname, uuid]
     else:
         if req.get('cause') == "You have already looked up this name recently":
             print('API request error, try again in a moment')
@@ -62,21 +72,24 @@ def getbwstats(req_player):
     req_bwlevel = req_achievements.get('bedwars_level')
     req_stats = req_player.get('stats')
     req_bedwars = req_stats.get('Bedwars')
+    req_xp = req_bedwars.get('Experience')
     req_finalk = req_bedwars.get('final_kills_bedwars')
     if req_finalk is None:
         req_finalk = 0
     req_finald = req_bedwars.get('final_deaths_bedwars')
     if req_finald is None:
         req_finald = 1
-    return [req_displayname, req_bwlevel, req_finalk, req_finald, req_uuid]
+    return [req_displayname, req_bwlevel, req_finalk, req_finald, req_uuid, req_xp]
 
 
 def getstats(name):
-    url = f"https://api.hypixel.net/player?key={APIkey}&name={name}"
+    url = f"https://api.hypixel.net/player?key={APIkey}&name={name.strip()}"
     req = requests.get(url).json()
+    print(req)
     req_player = req.get('player')
     if req_player is not None:
         a = getbwstats(req_player)
+        print(a)
         return a
     else:
         try:
@@ -107,12 +120,13 @@ def mtrequest(names):
 
 
 def addplayer(newplayer):
-    if newplayer not in playerlist:
+    if newplayer.strip() not in playerlist:
         a = getstats(newplayer)
-        playerlist.append(newplayer)
+        playerlist.append(newplayer.strip())
         totalstats.append(a)
         if session_isstarted:
             stats_before.append(a)
+        newplayer = newplayer.strip()
         print(f'{newplayer} was added')
 
 
@@ -141,19 +155,23 @@ def checkclient():
 
 def choosemode():
     global baldstatsmode
+    global mode_remembered
     baldstatsmode = False
-    with open(cfgfile) as cfg:
-        for cfgline in cfg:
-            s = cfgline.split('=')
-            if s[0] == 'RememberMode':
-                if s[1] == 'logfile':
-                    baldstatsmode = 'logfile'
-                elif s[1] == 'api':
-                    baldstatsmode = 'api'
+    mode_remembered = False
+    if os.path.exists(cfgfile):
+        with open(cfgfile) as cfg:
+            for cfgline in cfg:
+                s = cfgline.split('=')
+                if s[0] == 'RememberMode':
+                    mode_remembered = True
+                    if s[1].strip() == 'logfile':
+                        baldstatsmode = 'logfile'
+                    elif s[1].strip() == 'api':
+                        baldstatsmode = 'api'
     if not baldstatsmode:
         print('CHOOSE BALDSTATS MODE')
-        print('Type 1 to get stats from the log file (updates in real time, unable to track stats of nicked players')
-        print('Type 2 to get stats from the API (updates once every 30 seconds, tracks stats of nicked players')
+        print('Type 1 to get stats from the log file (updates in real time, unable to track stats of nicked players)')
+        print('Type 2 to get stats from the API (updates once every 30 seconds, tracks stats of nicked players)')
         m = int(input())
         if m == 1:
             baldstatsmode = 'logfile'
@@ -164,41 +182,47 @@ def choosemode():
 
 
 def remembermode():
-    if not baldstatsmode:
+    global baldstatsmode
+    global mode_remembered
+    if not mode_remembered:
         print('Do you want to remember your choice?')
         print('y - yes')
         print('n - no')
         m = input()
         if m == 'y':
-            with open(cfgfile, 'w') as cfg:
-                cfg.write(f'RememberMode={baldstatsmode}\n')
+            with open(cfgfile, 'a+') as cfg:
+                cfg.write(f'RememberMode={baldstatsmode}' + '\n')
 
 
 def get_api_key():
     global APIkey
     apikey = False
-    with open(cfgfile) as cfg:
-        for cfgline in cfg:
-            s = cfgline.split('=')
-            if s[0] == 'API_KEY':
-                APIkey = s[1]
+    if os.path.exists(cfgfile):
+        with open(cfgfile) as cfg:
+            for cfgline in cfg:
+                s = cfgline.split('=')
+                if s[0] == 'API_KEY':
+                    APIkey = s[1].strip()
+                    apikey = True
     if not apikey:
         print('Enter your hypixel API key (you can get it by using /api new on the server)')
-        while True:
+        apikeycheck = False
+        while not apikeycheck:
             APIkey = input()
             req_link = f'https://api.hypixel.net/player?key={APIkey}'
-            if requests.get(req_link) == '{"success":false,"cause":"Invalid API key"}':
+            if requests.get(req_link) == '<Response [403]>':
                 print('Invalid API key, try again')
             else:
-                with open(cfgfile, 'w') as cfg:
-                    cfg.write(f'API_KEY={APIkey}\n')
-                break
+                with open(cfgfile, 'a+') as cfg:
+                    cfg.write(f'API_KEY={APIkey}' + '\n')
+                apikeycheck = True
 
 
 def startsession():
     global session_starttime
     global stats_before
     global session_isstarted
+    global totalstats
     session_starttime = str(datetime.now())[:16]
     stats_before = totalstats
     session_isstarted = True
@@ -212,23 +236,28 @@ def endsession():
 
 get_api_key()
 
-ignnotentered = True
-if not os.path.exists(cfgfile):
-    while ignnotentered:
-        ign = input('Enter your minecraft nickname\n')
-        ign = checkname(ign)
-        if ign != "":
-            os.mkdir(f"C:/Users/{user}/Appdata/Roaming/Baldstats")
-            with open(cfgfile, 'w') as cfg:
-                cfg.write(f'Name={ign}\n')
-                ignnotentered = False
+if os.path.exists(cfgfile):
+    with open(cfgfile) as cfg:
+        ignentered = False
+        for cfgline in cfg:
+            s = cfgline.split('=')
+            if s[0] == 'Name':
+                ign = s[1]
+                ignentered = True
+while not ignentered:
+    ign = input('Enter your minecraft nickname' + '\n')
+    ign = checkname(ign)[0]
+    uuid = checkname(ign)[1]
+    if ign != "":
+        with open(cfgfile, 'a+') as cfg:
+            cfg.write(f'Name={ign}={uuid}' + '\n')
+            ignentered = True
 
 with open(cfgfile) as cfg:
     for cfgline in cfg:
         s = cfgline.split('=')
         if s[0] == 'Name':
             addplayer(s[1])
-            cfgplayer = s[1]
 
 lunar_client = f"C:/Users/{user}/.lunarclient/offline/1.8/logs/latest.log"
 minecraft_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/latest.log"
@@ -263,89 +292,74 @@ while True:
             length = len(f.readlines())
         for line in range(currentline, length):
             with open(logfile) as f:
-                lastline = f.readlines()[line]
+                lastline = f.readlines()[line].strip()
             logfile_lastchanged = os.stat(logfile).st_mtime
             currentline = line + 1
-            if lastline[11:30] != '[Client thread/INFO':
-                break
+            if lastline[11:31] == '[Client thread/INFO]':
+                s = lastline.split()
 
-            s = lastline.split()
+                if len(s) == 4:
+                    # player joins the party
+                    if s[1] == 'joined' and s[3] == 'party.':
+                        addplayer(s[0])
+                    # you leave the party
+                    if s[0] == 'You' and s[1] == 'left':
+                        totalstats = totalstats[0]
 
-            if len(playerlist) != 0:
-                if lastline[-12:-1] == 'FINAL KILL!':
-                    for player in playerlist:
-                        if f'{player}' in lastline:
-                            if f'{player}' != s[3]:
-                                a = playerlist.index(f'{player}')
-                                totalstats[a][1] += 1
-                                printer(player)
-                            else:
-                                totalstats[playerlist.index(
-                                    f'{player}')][2] += 1
-                                printer(player)
+                if len(s) == 5:
+                    # player leaves the party
+                    if s[2] == 'left' and s[4] == 'party.':
+                        removeplayer(s[0])
+                    # you joined someone else's party
+                    elif s[0] == 'You' and s[3] == 'party!':
+                        addplayer(s[2][:-2])
+                    # someone disbands the party
+                    elif s[1] == 'has' and s[2] == 'disbanded':
+                        totalstats = totalstats[0]
 
-            _s = s[3:]
-            for i in _s:
-                if i[0] != '[' and i[-1] != ']':
-                    s.append(i)
+                if len(s) == 7:
+                    # player gets removed from the party
+                    if s[1] == 'has' and s[3] == 'removed':
+                        removeplayer(s[0])
 
-            if len(s) == 4:
-                # player joins the party
-                if s[1] == 'joined' and s[3] == 'party.':
-                    addplayer(s[0])
-                # you leave the party
-                if s[0] == 'You' and s[1] == 'left':
-                    totalstats = totalstats[0]
+                if len(s) == 14:
+                    # the party gets disbanded
+                    if s[1] == 'party' and s[3] == 'disbanded':
+                        totalstats = totalstats[0]
 
-            if len(s) == 5:
-                # player leaves the party
-                if s[2] == 'left' and s[4] == 'party.':
-                    removeplayer(s[0])
-                # you joined someone else's party
-                elif s[0] == 'You' and s[3] == 'party!':
-                    addplayer(s[2][:-2])
-                # someone disbands the party
-                elif s[1] == 'has' and s[2] == 'disbanded':
-                    totalstats = totalstats[0]
-
-            if len(s) == 7:
-                # player gets removed from the party
-                if s[1] == 'has' and s[3] == 'removed':
-                    removeplayer(s[0])
-
-            if len(s) == 14:
-                # the party gets disbanded
-                if s[1] == 'party' and s[3] == 'disbanded':
-                    totalstats = totalstats[0]
-
-            if s[0] == "You'll":
-                s2 = lastline.split(':')
-                namelist = []
-                s = s2[3].split()
-                if len(s) >= 4:
-                    if s[1] == "You'll":
-                        pl = s2[4].split(',')
-                        for m in pl:
-                            n = m.split()
-                            ap = n[-1]
-                            namelist.append(ap)
-                        mtrequest(namelist)
-            if baldstatsmode == 'logfile':
-                if lastline[-12:-1] == 'FINAL KILL!':
-                    for player in playerlist:
-                        s = lastline.split()
-                        if f'{player}' in lastline:
-                            if not f'{player}' == s[3]:
-                                a = playerlist.index(f'{player}')
-                                totalstats[a][2] += 1
-                            else:
-                                totalstats[playerlist.index(f'{player}')][3] += 1
-                            overallprint()
-            elif baldstatsmode == 'api':
-                if cd <= time.time() - 30:
-                    cd = time.time()
-                    for i in playerlist:
-                        getstats(i)
+                if s[0] == "You'll":
+                    s2 = lastline.split(':')
+                    namelist = []
+                    s = s2[3].split()
+                    if len(s) >= 4:
+                        if s[1] == "You'll":
+                            pl = s2[4].split(',')
+                            for m in pl:
+                                n = m.split()
+                                ap = n[-1]
+                                namelist.append(ap)
+                            mtrequest(namelist)
+                if baldstatsmode == 'logfile':
+                    if lastline[-11:] == 'FINAL KILL!':
+                        print(1)
+                        print(playerlist)
+                        for player in playerlist:
+                            playerstr = f'{player}'.strip()
+                            if playerstr in lastline:
+                                print(playerlist)
+                                a = playerlist.index(playerstr)
+                                print(a)
+                                print(totalstats)
+                                if not playerstr == s[4]:
+                                    totalstats[a][2] += 1
+                                else:
+                                    totalstats[a][3] += 1
+                                overallprint()
+                elif baldstatsmode == 'api':
+                    if cd <= time.time() - 30:
+                        cd = time.time()
+                        for i in playerlist:
+                            getstats(i)
 
     else:
         time.sleep(0.01)
