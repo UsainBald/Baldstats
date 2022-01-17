@@ -11,6 +11,7 @@ statsfile = f"C:/Users/{user}/Appdata/Roaming/Baldstats/session_stats.txt"
 # APIkey = "f57c9f4a-175b-430c-a261-d8c199abd927"
 playerlist = []
 totalstats = []
+logfile = ''
 logfile_lastchanged = 0
 currentline = 0
 cd = 0
@@ -236,6 +237,55 @@ def get_api_key():
                 apikeycheck = True
 
 
+def get_name():
+    global totalstats
+    if os.path.exists(cfgfile):
+        with open(cfgfile) as cfg:
+            ignentered = False
+            for cfgline in cfg:
+                s = cfgline.split('=')
+                if s[0] == 'Name':
+                    ign = s[1]
+                    ignentered = True
+    while not ignentered:
+        ign = input('Enter your minecraft nickname' + '\n')
+        ign = checkname(ign)[0]
+        uuid = checkname(ign)[1]
+        if ign != "":
+            with open(cfgfile, 'a+') as cfg:
+                cfg.write(f'Name={ign}={uuid}' + '\n')
+                ignentered = True
+
+    with open(cfgfile) as cfg:
+        for cfgline in cfg:
+            s = cfgline.split('=')
+            if s[0] == 'Name':
+                playerlist.append('dababy2012_YT')
+                totalstats = [['dababy2012_YT', 40, 1400, 200, 'dsadas', 321312]]
+                # addplayer(s[1])
+
+
+def get_client():
+    global logfile
+    global clientlist
+    lunar_client = f"C:/Users/{user}/.lunarclient/offline/1.8/logs/latest.log"
+    minecraft_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/latest.log"
+    badlion_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/blclient/chat/latest.log"
+    pvplounge_client = f"C:/Users/{user}/AppData/.pvplounge/logs/latest.log"
+
+    clientlist = [lunar_client, minecraft_client, badlion_client, pvplounge_client]
+    logfile = checkclient()
+
+    if logfile == badlion_client:
+        print('Linked to Badlion Client')
+    elif logfile == minecraft_client:
+        print('Linked to the Official Launcher')
+    elif logfile == lunar_client:
+        print('Linked to Lunar Client')
+    elif logfile == pvplounge_client:
+        print('Linked to PVPLounge Client')
+
+
 def startsession():
     global session_starttime
     global stats_before
@@ -253,49 +303,8 @@ def endsession():
 
 
 get_api_key()
-
-if os.path.exists(cfgfile):
-    with open(cfgfile) as cfg:
-        ignentered = False
-        for cfgline in cfg:
-            s = cfgline.split('=')
-            if s[0] == 'Name':
-                ign = s[1]
-                ignentered = True
-while not ignentered:
-    ign = input('Enter your minecraft nickname' + '\n')
-    ign = checkname(ign)[0]
-    uuid = checkname(ign)[1]
-    if ign != "":
-        with open(cfgfile, 'a+') as cfg:
-            cfg.write(f'Name={ign}={uuid}' + '\n')
-            ignentered = True
-
-with open(cfgfile) as cfg:
-    for cfgline in cfg:
-        s = cfgline.split('=')
-        if s[0] == 'Name':
-            playerlist.append('dababy2012_YT')
-            totalstats = [['dababy2012_YT', 40, 1400, 200, 'dsadas', 321312]]
-            # addplayer(s[1])
-
-lunar_client = f"C:/Users/{user}/.lunarclient/offline/1.8/logs/latest.log"
-minecraft_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/latest.log"
-badlion_client = f"C:/Users/{user}/AppData/Roaming/.minecraft/logs/blclient/chat/latest.log"
-pvplounge_client = f"C:/Users/{user}/AppData/.pvplounge/logs/latest.log"
-clientlist = [lunar_client, minecraft_client, badlion_client, pvplounge_client]
-
-logfile = checkclient()
-
-if logfile == badlion_client:
-    print('Linked to Badlion Client')
-elif logfile == minecraft_client:
-    print('Linked to the Official Launcher')
-elif logfile == lunar_client:
-    print('Linked to Lunar Client')
-elif logfile == pvplounge_client:
-    print('Linked to PVPLounge Client')
-
+get_name()
+get_client()
 choosemode()
 remembermode()
 startsession()
@@ -303,10 +312,8 @@ startsession()
 for i in playerlist:
     print('Current party:')
     print(i)
-
 with open(logfile) as f:
     currentline = len(f.readlines())  # finding the last line
-
 while True:
     if os.stat(logfile).st_mtime > logfile_lastchanged:
         with open(logfile) as f:
