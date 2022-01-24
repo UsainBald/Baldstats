@@ -17,8 +17,10 @@ currentline = 0
 cd = 0
 session_starttime = ''
 stats_before = []
+stats_after = []
 APIkey = ''
 baldstatsmode = ''
+user_ign = ''
 mode_remembered = False
 session_isstarted = False
 
@@ -95,16 +97,22 @@ def getstats(name):
         return a
     else:
         try:
-            ind = playerlist.index(name)
-            uuid_req = totalstats[ind][4]
+            if not session_isstarted:
+                with open(cfgfile) as cfg:
+                    for cfgline in cfg:
+                        s = cfgline.split('=')
+                        if s[0] == 'Name':
+                            uuid_req = s[2].strip()
+            else:
+                uuid_req = totalstats[playerlist.index(name.strip())][4]
             url = f"https://api.hypixel.net/player?key={APIkey}&uuid={uuid_req}"
             req = requests.get(url).json()
             req_player = req.get('player')
             if req_player is not None:
                 a = getbwstats(req_player)
                 return a
-        except ValueError:
-            pass
+        except Exception:
+            print(f'Failed to make a request for {name}')
 
 
 def urllist(nicklist):
@@ -124,32 +132,46 @@ def mtrequest(names):
 def addplayer(newplayer):
     newplayer = newplayer.strip()
     if newplayer not in playerlist:
-        a = getstats(newplayer)
+        p = getstats(newplayer)
         playerlist.append(newplayer)
-        totalstats.append(a)
+        totalstats.append(p)
         if session_isstarted:
-            stats_before.append(a)
+            player_join_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+            x = [i for i in p]
+            x.append(player_join_time)
+            stats_before.append(x)
         print(f'{newplayer} was added')
         print(totalstats)
         print(playerlist)
 
 
 def removeplayer(kickedplayer):
+    player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
     kickedplayer = kickedplayer.strip()
     if kickedplayer in playerlist:
+        if kickedplayer in [element for a_list in stats_before for element in a_list]:
+            kickedplayer_stats_after = getstats(kickedplayer)
+            kickedplayer_stats_after.append(player_leave_time)
+            stats_after.append(kickedplayer_stats_after)
         del totalstats[playerlist.index(kickedplayer)]
         del playerlist[playerlist.index(kickedplayer)]
         print(f"{kickedplayer} was removed")
     else:
         print(f'ERROR: {kickedplayer} is not in the list')
-        
+
 
 def disband_party():
     global totalstats
     global playerlist
+    player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+    for sa_player in playerlist:
+        if sa_player[0] != user_ign:
+            kickedplayer_stats_after = getstats(sa_player[0])
+            kickedplayer_stats_after.append(player_leave_time)
+            stats_after.append(kickedplayer_stats_after)
     totalstats = [totalstats[0]]
     playerlist = [playerlist[0]]
-    
+
 
 def checkclient():
     client = 0
@@ -222,7 +244,6 @@ def get_api_key():
                             print('Invalid API key, try again')
                             APIkey = input()
                         else:
-                            cfg.write(f'API_KEY={APIkey}' + '\n')
                             apikey = True
     if not apikey:
         print('Enter your hypixel API key (you can get it by using /api new on the server)')
@@ -239,18 +260,19 @@ def get_api_key():
 
 def get_name():
     global totalstats
+    global user_ign
     if os.path.exists(cfgfile):
         with open(cfgfile) as cfg:
             ignentered = False
             for cfgline in cfg:
                 s = cfgline.split('=')
                 if s[0] == 'Name':
-                    ign = s[1]
                     ignentered = True
     while not ignentered:
         ign = input('Enter your minecraft nickname' + '\n')
-        ign = checkname(ign)[0]
-        uuid = checkname(ign)[1]
+        a = checkname(ign)
+        ign = a[0]
+        uuid = a[1]
         if ign != "":
             with open(cfgfile, 'a+') as cfg:
                 cfg.write(f'Name={ign}={uuid}' + '\n')
@@ -260,9 +282,8 @@ def get_name():
         for cfgline in cfg:
             s = cfgline.split('=')
             if s[0] == 'Name':
-                playerlist.append('dababy2012_YT')
-                totalstats = [['dababy2012_YT', 40, 1400, 200, 'dsadas', 321312]]
-                # addplayer(s[1])
+                addplayer(s[1].strip())
+                user_ign = s[1].strip()
 
 
 def get_client():
@@ -286,20 +307,70 @@ def get_client():
         print('Linked to PVPLounge Client')
 
 
+def party_adjust(party_array):
+    global party_arr
+    print(party_array)
+    party_members = []
+    for i in range(len(party_array)):
+        if party_array[i] == '?':
+            party_members.append(party_array[i - 1])
+    if not sorted(playerlist) == sorted(party_members):
+        for elem in party_members:
+            if elem not in playerlist:
+                addplayer(elem)
+        for elem in playerlist:
+            if elem not in party_members:
+                removeplayer(elem)
+    party_arr = []
+
+
 def startsession():
     global session_starttime
     global stats_before
     global session_isstarted
     global totalstats
-    session_starttime = str(datetime.now())[:16]
-    stats_before = [i[:] for i in totalstats]
+    session_starttime = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+    for elem in totalstats:
+        bef = [i for i in elem]
+        bef.append(session_starttime)
+        stats_before.append(bef)
     session_isstarted = True
+    print('The session was started')
+    print(f'Time = {session_starttime}')
+    print(stats_before)
 
 
 def endsession():
-    global session_isstarted
-    session_isstarted = False
-    pass
+    session_endtime = player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+    for sa_player in totalstats:
+        kickedplayer_stats_after = getstats(sa_player[0])
+        kickedplayer_stats_after.append(player_leave_time)
+        stats_after.append(kickedplayer_stats_after)
+    with open(statsfile, 'a+') as ss:
+        ss.write(f'SESSION STARTED {session_starttime}' + '\n')
+    for sa in stats_after:
+        _ind = 20
+        for sb in stats_before:
+            if sa[0] == sb[0]:
+                _ind = stats_before.index(sb)
+                break
+        sa_ign = sa[0]
+        sa_final_kills = sa[2] - stats_before[_ind][2]
+        sa_final_deaths = sa[3] - stats_before[_ind][3]
+        if sa_final_deaths == 0:
+            sa_fkdr = sa_final_kills
+        else:
+            sa_fkdr = round(sa_final_kills / sa_final_deaths, 2)
+        sa_level_progress = sa[1] - stats_before[_ind][1]
+        sa_xp_progress = sa[5] - stats_before[_ind][5]
+        sa_join_time = stats_before[_ind][6]
+        sa_leave_time = sa[6]
+        with open(statsfile, 'a+') as ss:
+            ss.write(
+                f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress} {sa_join_time} {sa_leave_time}' + '\n')
+    with open(statsfile, 'a+') as ss:
+        ss.write(f'SESSION ENDED {session_endtime}' + '\n')
+        ss.write('\n')
 
 
 get_api_key()
@@ -307,14 +378,17 @@ get_name()
 get_client()
 choosemode()
 remembermode()
-startsession()
+# startsession()
 
 for i in playerlist:
     print('Current party:')
     print(i)
 with open(logfile) as f:
     currentline = len(f.readlines())  # finding the last line
-while True:
+session_is_over = False
+party_check = False
+party_arr = []
+while not session_is_over:
     if os.stat(logfile).st_mtime > logfile_lastchanged:
         with open(logfile) as f:
             length = len(f.readlines())
@@ -323,8 +397,31 @@ while True:
                 lastline = f.readlines()[line].strip()
             logfile_lastchanged = os.stat(logfile).st_mtime
             currentline = line + 1
+
+            if lastline == 'close_program':  # nado pomenyat na zakrytie programmy kogda budet gui
+                if session_isstarted:
+                    endsession()
+                    session_is_over = True
+                    break
+
             if lastline[11:31] == '[Client thread/INFO]':
                 s = lastline.split()[4:]
+                len_s = len(s)
+
+                if s == ['Protect', 'your', 'bed', 'and', 'destroy', 'the', 'enemy', 'beds.']:
+                    if not session_isstarted:
+                        startsession()
+                if party_check:
+                    if len_s > 0:
+                        if not s[0] == '-----------------------------':
+                            for n in s:
+                                party_arr.append(n)
+                        else:
+                            party_check = False
+                            party_adjust(party_arr)
+                if len_s > 1:
+                    if s[0] == 'Party' and s[1] == 'Members':
+                        party_check = True
                 for i in range(len(s)):
                     if s[i][0] == '[' and s[i][-1] == ']':
                         del s[i]
@@ -378,23 +475,27 @@ while True:
                                     ap = n[-1]
                                     namelist.append(ap)
                                 mtrequest(namelist)
-                if baldstatsmode == 'logfile':
-                    if lastline[-11:] == 'FINAL KILL!':
-                        for player in playerlist:
-                            playerstr = f'{player}'.strip()
-                            if playerstr in lastline:
-                                a = playerlist.index(playerstr)
-                                if not playerstr == s[4]:
-                                    totalstats[a][2] += 1
-                                else:
-                                    totalstats[a][3] += 1
+                if session_isstarted:
+                    if baldstatsmode == 'logfile':
+                        if lastline[-11:] == 'FINAL KILL!':
+                            for player in playerlist:
+                                if player in lastline:
+                                    a = playerlist.index(player)
+                                    if player != s[0]:
+                                        totalstats[a][2] += 1
+                                    else:
+                                        totalstats[a][3] += 1
+                                    print(playerlist)
+                                    print(stats_before)
+                                    print(totalstats)
+                                    print(player)
+                                    overallprint()
+                    elif baldstatsmode == 'api':
+                        if cd <= time.time() - 30:
+                            cd = time.time()
+                            for i in playerlist:
+                                getstats(i)
                                 overallprint()
-                elif baldstatsmode == 'api':
-                    if cd <= time.time() - 30:
-                        cd = time.time()
-                        for i in playerlist:
-                            getstats(i)
-                            overallprint()
 
     else:
-        time.sleep(0.01)
+        time.sleep(0.1)
