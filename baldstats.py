@@ -38,12 +38,18 @@ def printer(currentplayer):  # nado ubrat' kogda gui budet
 
 def overallprint():  # nado ubrat' kogda gui budet
     for curplayer in totalstats:
+        t_index = sb_index = 'wrong index'
         session_displayname = curplayer[0]
-        _index = playerlist.index(f'{curplayer[0]}')
-        session_bwlevel = totalstats[_index][1] - stats_before[_index][1]
-        session_xpprogress = totalstats[_index][5] - stats_before[_index][5]
-        session_finalk = totalstats[_index][2] - stats_before[_index][2]
-        session_finald = totalstats[_index][3] - stats_before[_index][3]
+        for elem in stats_before:
+            if elem[0] == curplayer[0]:
+                sb_index = stats_before.index(elem)
+        for elem in totalstats:
+            if elem[0] == curplayer[0]:
+                t_index = totalstats.index(elem)
+        session_bwlevel = totalstats[t_index][1] - stats_before[sb_index][1]
+        session_xpprogress = totalstats[t_index][5] - stats_before[sb_index][5]
+        session_finalk = totalstats[t_index][2] - stats_before[sb_index][2]
+        session_finald = totalstats[t_index][3] - stats_before[sb_index][3]
         if session_finald == 0:
             session_finald = 1
         print(' ')
@@ -171,6 +177,7 @@ def disband_party():
             stats_after.append(kickedplayer_stats_after)
     totalstats = [totalstats[0]]
     playerlist = [playerlist[0]]
+    print('the party was disbanded')
 
 
 def checkclient():
@@ -442,7 +449,10 @@ while not session_is_over:
                         removeplayer(s[0])
                     # you joined someone else's party (works)
                     elif s[0] == 'You' and s[4] == 'party!':
-                        addplayer(s[3][:-2])
+                        if s[3][-1] == "'":
+                            addplayer(s[3][:-1])
+                        else:
+                            addplayer(s[3][:-2])
                     # someone disbands the party (should work)
                     elif s[1] == 'has' and s[2] == 'disbanded':
                         disband_party()
@@ -451,6 +461,9 @@ while not session_is_over:
                     # player gets removed from the party (should work)
                     if s[1] == 'has' and s[3] == 'removed':
                         removeplayer(s[0])
+                    # the party is empty
+                    if s[0] == 'You' and s[2] == 'not' and s[6] == 'party.':
+                        disband_party()
 
                 if len_s == 9:
                     # player gets removed from the party (should work)
@@ -485,10 +498,8 @@ while not session_is_over:
                                         totalstats[a][2] += 1
                                     else:
                                         totalstats[a][3] += 1
-                                    print(playerlist)
                                     print(stats_before)
                                     print(totalstats)
-                                    print(player)
                                     overallprint()
                     elif baldstatsmode == 'api':
                         if cd <= time.time() - 30:
