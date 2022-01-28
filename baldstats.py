@@ -4,7 +4,7 @@ import os
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-# test
+# test 2
 user = (getpass.getuser())
 cfg_file = f"C:/Users/{user}/Appdata/Roaming/Baldstats/settings.cfg"
 stats_file = f"C:/Users/{user}/Appdata/Roaming/Baldstats/session_stats.txt"
