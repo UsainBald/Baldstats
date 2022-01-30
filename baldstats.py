@@ -4,7 +4,7 @@ import os
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-# test 2
+
 user = (getpass.getuser())
 cfg_file = f"C:/Users/{user}/Appdata/Roaming/Baldstats/settings.cfg"
 stats_file = f"C:/Users/{user}/Appdata/Roaming/Baldstats/session_stats.txt"
@@ -31,18 +31,18 @@ if not os.path.exists(f"C:/Users/{user}/Appdata/Roaming/Baldstats"):
 
 def print_stats():  # nado ubrat' kogda gui budet
     for current_player in party_stats:
-        t_index = sb_index = 'wrong index'
+        ps_index = sb_index = 'wrong index'
         session_displayname = current_player[0]
         for elem in stats_before:
             if elem[0] == current_player[0]:
                 sb_index = stats_before.index(elem)
         for elem in party_stats:
             if elem[0] == current_player[0]:
-                t_index = party_stats.index(elem)
-        session_bedwars_level = party_stats[t_index][1] - stats_before[sb_index][1]
-        session_exp_progress = party_stats[t_index][5] - stats_before[sb_index][5]
-        session_final_kills = party_stats[t_index][2] - stats_before[sb_index][2]
-        session_final_deaths = party_stats[t_index][3] - stats_before[sb_index][3]
+                ps_index = party_stats.index(elem)
+        session_bedwars_level = party_stats[ps_index][1] - stats_before[sb_index][1]
+        session_exp_progress = party_stats[ps_index][5] - stats_before[sb_index][5]
+        session_final_kills = party_stats[ps_index][2] - stats_before[sb_index][2]
+        session_final_deaths = party_stats[ps_index][3] - stats_before[sb_index][3]
         if session_final_deaths == 0:
             session_final_deaths = 1
         print(' ')
@@ -53,20 +53,18 @@ def print_stats():  # nado ubrat' kogda gui budet
         print(f"{session_displayname}'s final kills =", session_final_kills)
 
 
-'''def check_name(ign):
+def check_name(ign):
     url = f"https://api.hypixel.net/player?key={API_key}&name={ign}"
     req = requests.get(url).json()
     cn_player = req.get('player')
     if cn_player is not None:
-        displayname = cn_player.get("displayname")
-        uuid = cn_player.get("uuid")
-        return [displayname, uuid]
+        return get_bw_stats(cn_player)
     else:
         if req.get('cause') == "You have already looked up this name recently":
             print('API request error, try again in a moment')
         else:
             print(f'ERROR: no player by the name of {ign} found')
-        return ""'''
+        return ""
 
 
 def get_bw_stats(req_player):
@@ -86,36 +84,21 @@ def get_bw_stats(req_player):
     return [req_displayname, req_bedwars_level, req_final_kills, req_final_deaths, req_uuid, req_xp]
 
 
-def get_stats(name):
+def get_stats_name(name):
     name = name.strip()
     url = f"https://api.hypixel.net/player?key={API_key}&name={name}"
     req = requests.get(url).json()
     req_player = req.get('player')
     if req_player is not None:
-        h = get_bw_stats(req_player)
-        print(h)
-        return h
-    else:
-        try:
-            if len(party_members) == 0:
-                with open(cfg_file) as cfg:
-                    for cfg_line in cfg:
-                        c = cfg_line.split('=')
-                        if s[0] == 'Name':
-                            uuid_req = c[2].strip()
-            else:
-                t_index = 'wrong index'
-                for elem in party_stats:
-                    if elem[0] == name:
-                        t_index = party_stats.index(elem)
-                uuid_req = party_stats[t_index][4]
-            url = f"https://api.hypixel.net/player?key={API_key}&uuid={uuid_req}"
-            req = requests.get(url).json()
-            req_player = req.get('player')
-            if req_player is not None:
-                return get_bw_stats(req_player)
-        except Exception:
-            print(f'Failed to make a request for {name}')
+        return get_bw_stats(req_player)
+
+
+def get_stats_uuid(uuid):
+    url = f"https://api.hypixel.net/player?key={API_key}&uuid={uuid}"
+    req = requests.get(url).json()
+    req_player = req.get('player')
+    if req_player is not None:
+        return get_bw_stats(req_player)
 
 
 def mt_request(names):
@@ -126,8 +109,12 @@ def mt_request(names):
 
 def add_player(new_player):
     new_player = new_player.strip()
+    if len(new_player) > 16:  # checking whether it is an ign or a uuid
+        p = get_stats_uuid(new_player)
+        new_player = p[0]
+    else:
+        p = get_stats_name(new_player)
     if new_player not in party_members:
-        p = get_stats(new_player)
         party_members.append(new_player)
         party_stats.append(p)
         if session_is_started:
@@ -145,7 +132,11 @@ def remove_player(kicked_player):
     kicked_player = kicked_player.strip()
     if kicked_player in party_members:
         if kicked_player in [element for a_list in stats_before for element in a_list]:
-            kicked_player_stats_after = get_stats(kicked_player)
+            ps_index = 'wrong index'
+            for elem in party_stats:
+                if elem[0] == kicked_player[0]:
+                    ps_index = party_stats.index(elem)
+            kicked_player_stats_after = get_stats_uuid(party_stats[ps_index][4])
             kicked_player_stats_after.append(player_leave_time)
             stats_after.append(kicked_player_stats_after)
         del party_stats[party_members.index(kicked_player)]
@@ -159,14 +150,19 @@ def disband_party():
     global party_stats
     global party_members
     player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+    if party_members != [user_ign]:
+        print('the party was disbanded')
     for sa_player in party_members:
-        if sa_player[0] != user_ign:
-            kicked_player_stats_after = get_stats(sa_player[0])
+        if sa_player != user_ign:
+            ps_index = 'wrong index'
+            for elem in party_stats:
+                if elem[0] == sa_player[0]:
+                    ps_index = party_stats.index(elem)
+            kicked_player_stats_after = get_stats_uuid(party_stats[ps_index][4])
             kicked_player_stats_after.append(player_leave_time)
             stats_after.append(kicked_player_stats_after)
     party_stats = [party_stats[0]]
     party_members = [party_members[0]]
-    print('the party was disbanded')
 
 
 def check_client():
@@ -257,6 +253,7 @@ def get_api_key():
 def get_name():
     global party_stats
     global user_ign
+    global party_members
     if os.path.exists(cfg_file):
         with open(cfg_file) as cfg:
             ign_entered = False
@@ -267,9 +264,11 @@ def get_name():
     while not ign_entered:
         ign = input('Enter your minecraft nickname' + '\n')
         a = check_name(ign)
-        ign = a[0]
-        uuid = a[1]
-        if ign != "":
+        if a != "":
+            ign = a[0]
+            uuid = a[4]
+            party_members.append(ign)
+            party_stats.append(a)
             with open(cfg_file, 'a+') as cfg:
                 cfg.write(f'Name={ign}={uuid}' + '\n')
                 ign_entered = True
@@ -278,8 +277,11 @@ def get_name():
         for cfg_line in cfg:
             s = cfg_line.split('=')
             if s[0] == 'Name':
-                add_player(s[1].strip())
-                user_ign = s[1].strip()
+                add_player(s[2].strip())
+                if party_stats == [None]:
+                    print(f'ERROR: Unable to get stats of {s[1].strip()}, try restarting the program')
+                else:
+                    user_ign = party_members[0]
 
 
 def get_client():
@@ -339,13 +341,13 @@ def start_session():
 def end_session():
     session_end_time = player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
     for sa_player in party_stats:
-        kicked_player_stats_after = get_stats(sa_player[0])
+        kicked_player_stats_after = get_stats_uuid(sa_player[4])
         kicked_player_stats_after.append(player_leave_time)
         stats_after.append(kicked_player_stats_after)
     with open(stats_file, 'a+') as ss:
         ss.write(f'SESSION STARTED {session_start_time}' + '\n')
     for sa in stats_after:
-        _ind = 20
+        _ind = 'wrong index'
         for sb in stats_before:
             if sa[0] == sb[0]:
                 _ind = stats_before.index(sb)
@@ -361,9 +363,9 @@ def end_session():
         sa_xp_progress = sa[5] - stats_before[_ind][5]
         sa_join_time = stats_before[_ind][6]
         sa_leave_time = sa[6]
+        del stats_before[_ind]
         with open(stats_file, 'a+') as ss:
-            ss.write(
-                f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress} {sa_join_time} {sa_leave_time}' + '\n')
+            ss.write(f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress} {sa_join_time} {sa_leave_time}' + '\n')
     with open(stats_file, 'a+') as ss:
         ss.write(f'SESSION ENDED {session_end_time}' + '\n')
         ss.write('\n')
@@ -374,7 +376,6 @@ get_name()
 get_client()
 choose_mode()
 remember_mode()
-# start_session()
 
 for i in party_members:
     print('Current party:')
@@ -438,6 +439,7 @@ while not session_is_over:
                         remove_player(s[0])
                     # you joined someone else's party (works)
                     elif s[0] == 'You' and s[4] == 'party!':
+                        disband_party()
                         if s[3][-1] == "'":
                             add_player(s[3][:-1])
                         else:
@@ -491,13 +493,11 @@ while not session_is_over:
                                     print(party_stats)
                                     print_stats()
                     elif baldstats_mode == 'api':
-                        print(time.time())
-                        print(time.time() - 30)
-                        if cd <= time.time() - 30:
+                        if cd <= time.time() - 8:
                             cd = time.time()
-                            for i in party_members:
-                                get_stats(i)
-                                print_stats()
+                            for i in party_stats:
+                                get_stats_uuid(i[4])
+                            print_stats()
 
     else:
         time.sleep(0.1)
