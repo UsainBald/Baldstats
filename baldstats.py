@@ -102,21 +102,21 @@ class Frame(QMainWindow):
 
     def print_stats(self):  # nado ubrat' kogda gui budet
         for current_player in self.party_stats:
-            t_index = sb_index = 'wrong index'
+            ps_index = sb_index = 'wrong index'
             session_displayname = current_player[0]
             for elem in self.stats_before:
                 if elem[0] == current_player[0]:
                     sb_index = self.stats_before.index(elem)
             for elem in self.party_stats:
                 if elem[0] == current_player[0]:
-                    t_index = self.party_stats.index(elem)
-            session_bedwars_level = self.party_stats[t_index][1] - \
+                    ps_index = self.party_stats.index(elem)
+            session_bedwars_level = self.party_stats[ps_index][1] - \
                 self.stats_before[sb_index][1]
-            session_exp_progress = self.party_stats[t_index][5] - \
+            session_exp_progress = self.party_stats[ps_index][5] - \
                 self.stats_before[sb_index][5]
-            session_final_kills = self.party_stats[t_index][2] - \
+            session_final_kills = self.party_stats[ps_index][2] - \
                 self.stats_before[sb_index][2]
-            session_final_deaths = self.party_stats[t_index][3] - \
+            session_final_deaths = self.party_stats[ps_index][3] - \
                 self.stats_before[sb_index][3]
             if session_final_deaths == 0:
                 session_final_deaths = 1
@@ -130,14 +130,12 @@ class Frame(QMainWindow):
                 session_final_kills / session_final_deaths, 2))
             print(f"{session_displayname}'s final kills =", session_final_kills)
 
-    def check_name(self, ign):
+    def check_name(self, ign):  # NEW
         url = f"https://api.hypixel.net/player?key={self.API_key}&name={ign}"
         req = requests.get(url).json()
         cn_player = req.get('player')
         if cn_player is not None:
-            displayname = cn_player.get("displayname")
-            uuid = cn_player.get("uuid")
-            return [displayname, uuid]
+            return self.get_bw_stats(cn_player)
         else:
             if req.get('cause') == "You have already looked up this name recently":
                 print('API request error, try again in a moment')
@@ -161,36 +159,22 @@ class Frame(QMainWindow):
             req_final_deaths = 1
         return [req_displayname, req_bedwars_level, req_final_kills, req_final_deaths, req_uuid, req_xp]
 
-    def get_stats(self, name):
+    def get_stats_name(self, name):  # NEW
         name = name.strip()
         url = f"https://api.hypixel.net/player?key={self.API_key}&name={name}"
         req = requests.get(url).json()
         req_player = req.get('player')
         if req_player is not None:
-            h = self.get_bw_stats(req_player)
-            print(h)
-            return h
-        else:
-            try:
-                if len(self.party_members) == 0:
-                    with open(self.cfg_file) as cfg:
-                        for cfg_line in cfg:
-                            c = cfg_line.split('=')
-                            if c[0] == 'Name':
-                                uuid_req = c[2].strip()
-                else:
-                    t_index = 'wrong index'
-                    for elem in self.party_stats:
-                        if elem[0] == name:
-                            t_index = self.party_stats.index(elem)
-                    uuid_req = self.party_stats[t_index][4]
-                url = f"https://api.hypixel.net/player?key={self.API_key}&uuid={uuid_req}"
-                req = requests.get(url).json()
-                req_player = req.get('player')
-                if req_player is not None:
-                    return self.get_bw_stats(req_player)
-            except Exception:
-                print(f'Failed to make a request for {name}')
+            return self.get_bw_stats(req_player)
+
+# WHERE last_thread_line
+
+    def get_stats_uuid(self, uuid):  # NEW
+        url = f"https://api.hypixel.net/player?key={self.API_key}&uuid={uuid}"
+        req = requests.get(url).json()
+        req_player = req.get('player')
+        if req_player is not None:
+            return self.get_bw_stats(req_player)
 
     def mt_request(self, names):
         with ThreadPoolExecutor(80) as executor:
@@ -199,12 +183,19 @@ class Frame(QMainWindow):
 
     def add_player(self, new_player):
         new_player = new_player.strip()
+        if len(new_player) > 16:  # checking whether it is an ign or a uuid
+            new_player_stats = self.get_stats_uuid(new_player)
+            new_player = new_player_stats[0]
+        else:
+            new_player_stats = self.get_stats_name(new_player)
+
         if new_player not in self.party_members:
             new_player_stats = self.get_stats(new_player)
             if (new_player_stats == None):
                 print("Request failed!")
                 return
             # self.party_members.append(new_player)
+            # playerlist sorting:
             pos = -1
             for i in range(len(self.party_stats)):
                 if (self.party_stats[i][1] > new_player_stats[1]):
@@ -221,6 +212,7 @@ class Frame(QMainWindow):
                 cur_player, self.party_members[i] = self.party_members[i], cur_player
                 cur_stats, self.party_stats[i] = self.party_stats[i], cur_stats
 
+            # GUI table updating:
             self.table.insertRow(pos)
             self.table.setItem(pos, 0, QTableWidgetItem(new_player_stats[0]))
             self.table.setItem(pos, 1, QTableWidgetItem(
@@ -249,7 +241,13 @@ class Frame(QMainWindow):
         kicked_player = kicked_player.strip()
         if kicked_player in self.party_members:
             if kicked_player in [element for a_list in self.stats_before for element in a_list]:
-                kicked_player_stats_after = self.get_stats(kicked_player)
+                # kicked_player_stats_after = self.get_stats(kicked_player)
+                ps_index = 'wrong index'
+                for elem in self.party_stats:
+                    if elem[0] == kicked_player[0]:
+                        ps_index = self.party_stats.index(elem)
+                kicked_player_stats_after = self.get_stats_uuid(
+                    self.party_stats[ps_index][4])
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
             self.table.removeRow(self.party_members.index(kicked_player))
@@ -264,9 +262,16 @@ class Frame(QMainWindow):
         global self.party_members'''
         player_leave_time = str(datetime.now())[
             :10] + '_' + str(datetime.now())[11:16]
+        if self.party_members != [self.user_ign]:
+            print('the party was disbanded')
         for sa_player in self.party_members:
-            if sa_player[0] != self.user_ign:
-                kicked_player_stats_after = self.get_stats(sa_player[0])
+            if sa_player != self.user_ign:
+                ps_index = 'wrong index'
+                for elem in self.party_stats:
+                    if elem[0] == sa_player[0]:
+                        ps_index = self.party_stats.index(elem)
+                kicked_player_stats_after = self.get_stats_uuid(
+                    self.party_stats[ps_index][4])
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
 
@@ -280,7 +285,6 @@ class Frame(QMainWindow):
         self.add_player(self.user_ign)
         # self.party_stats = [self.party_stats[0]]
         # self.party_members = [self.party_members[0]]
-        print('the party was disbanded')
 
     def check_client(self):
         # BEFORE_COMMIT uncomment
@@ -381,9 +385,11 @@ class Frame(QMainWindow):
         while not ign_entered:
             ign = input('Enter your minecraft nickname' + '\n')
             a = self.check_name(ign)
-            ign = a[0]
-            uuid = a[1]
-            if ign != "":
+            if a != "":
+                ign = a[0]
+                uuid = a[4]
+                self.party_members.append(ign)
+                self.party_stats.append(a)
                 with open(self.cfg_file, 'a+') as cfg:
                     cfg.write(f'Name={ign}={uuid}' + '\n')
                     ign_entered = True
@@ -392,8 +398,12 @@ class Frame(QMainWindow):
             for cfg_line in cfg:
                 s = cfg_line.split('=')
                 if s[0] == 'Name':
-                    self.add_player(s[1].strip())
-                    self.user_ign = s[1].strip()
+                    self.add_player(s[2].strip())
+                    if self.party_stats == [None]:
+                        print(
+                            f'ERROR: Unable to get stats of {s[1].strip()}, try restarting the program')
+                    else:
+                        self.user_ign = self.party_members[0]
 
     def get_client(self):
         '''global self.log_file
@@ -453,13 +463,13 @@ class Frame(QMainWindow):
         session_end_time = player_leave_time = str(
             datetime.now())[:10] + '_' + str(datetime.now())[11:16]
         for sa_player in self.party_stats:
-            kicked_player_stats_after = self.get_stats(sa_player[0])
+            kicked_player_stats_after = self.get_stats_uuid(sa_player[4])
             kicked_player_stats_after.append(player_leave_time)
             self.stats_after.append(kicked_player_stats_after)
         with open(self.stats_file, 'a+') as ss:
             ss.write(f'SESSION STARTED {self.session_start_time}' + '\n')
         for sa in self.stats_after:
-            _ind = 20
+            _ind = "wrong index"
             for sb in self.stats_before:
                 if sa[0] == sb[0]:
                     _ind = self.stats_before.index(sb)
@@ -475,6 +485,7 @@ class Frame(QMainWindow):
             sa_xp_progress = sa[5] - self.stats_before[_ind][5]
             sa_join_time = self.stats_before[_ind][6]
             sa_leave_time = sa[6]
+            del self.stats_before[_ind]
             with open(self.stats_file, 'a+') as ss:
                 ss.write(
                     f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress} {sa_join_time} {sa_leave_time}' + '\n')
@@ -550,6 +561,7 @@ class Frame(QMainWindow):
                 self.remove_player(s[0])
             # you joined someone else's party (works)
             elif s[0] == 'You' and s[4] == 'party':
+                self.disband_party()
                 if s[3][-1] == "'":
                     self.add_player(s[3][:-1])
                 else:
@@ -605,13 +617,11 @@ class Frame(QMainWindow):
                             print(self.party_stats)
                             self.print_stats()
             elif self.baldstats_mode == 'api':
-                print(time.time())
-                print(time.time() - 30)
-                if self.cd <= time.time() - 30:
+                if self.cd <= time.time() - 8:
                     self.cd = time.time()
-                    for i in self.party_members:
-                        self.get_stats(i)
-                        self.print_stats()
+                    for i in self.party_stats:
+                        self.get_stats_uuid(i[4])
+                    self.print_stats()
 
 
 if __name__ == '__main__':
