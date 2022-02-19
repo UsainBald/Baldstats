@@ -17,6 +17,9 @@ class Communicate(QObject):
 class Frame(QMainWindow):
     def __init__(self):
         super().__init__()
+        # TODO: API new (for first-time users)
+        # TODO: window close
+
         # self.verticalLayout = QVBoxLayout(self)
         # self.table = QTableWidget(self.verticalLayout)
         # self.verticalLayout.addWidget(self.table)
@@ -27,12 +30,6 @@ class Frame(QMainWindow):
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
             ["Name", "Level", "FKDR", "Final kills", "Final deaths"])
-        # COMMIT useless
-        # self.table.setRowCount(2)
-        # for i in range(5):
-        #     for j in range(2):
-        #         self.table.setItem(j, i, QTableWidgetItem("###"))
-        # self.table.insertRow(0)
         self.setMinimumSize(800, 600)
 
         self.setWindowTitle("BaldStats testing")
@@ -48,10 +45,10 @@ class Frame(QMainWindow):
 
         self.user = (getpass.getuser())
         # BEFORE_COMMIT uncomment
-        # self.cfg_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/settings.cfg"
-        # self.stats_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/session_stats.txt"
-        self.cfg_file = f"./settings.cfg"
-        self.stats_file = f"./session_stats.txt"
+        self.cfg_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/settings.cfg"
+        self.stats_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/session_stats.txt"
+        # self.cfg_file = f"./settings.cfg"
+        # self.stats_file = f"./session_stats.txt"
 
         # self.API_key = "f57c9f4a-175b-430c-a261-d8c199abd927"
         self.party_members = []
@@ -70,17 +67,17 @@ class Frame(QMainWindow):
         self.mode_remembered = False
         self.session_is_started = False
         self.last_thread_line = ""
+        self.events = []
 
         # BEFORE_COMMIT uncomment
-        # if not os.path.exists(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats"):
-        #     os.mkdir(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats")
+        if not os.path.exists(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats"):
+            os.mkdir(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats")
 
         self.get_api_key()
         self.get_name()
         self.get_client()
         self.choose_mode()
         self.remember_mode()
-        # self.start_session()
 
         for i in self.party_members:
             print('Current party:')
@@ -91,14 +88,17 @@ class Frame(QMainWindow):
         self.log_file_last_changed = os.stat(self.log_file).st_mtime
 
         self.session_is_over = False
+        self.party_check = False
+        self.game_ended_check = False
         self.party_arr = []
 
         # self.main_cycle()
 
+        self.thread_running = True
         self.signal = Communicate()
         self.signal.process_logfile_line.connect(self.main_cycle)
-        logfile_thread = Thread(target=self.watch_logs)
-        logfile_thread.start()
+        self.logfile_thread = Thread(target=self.watch_logs)
+        self.logfile_thread.start()
 
     def print_stats(self):  # nado ubrat' kogda gui budet
         for current_player in self.party_stats:
@@ -152,12 +152,19 @@ class Frame(QMainWindow):
         req_bedwars = req_stats.get('Bedwars')
         req_xp = req_bedwars.get('Experience')
         req_final_kills = req_bedwars.get('final_kills_bedwars')
+        req_beds_broken = req_bedwars.get('bedwars_beds')
+        if req_beds_broken is None:
+            req_beds_broken = 0
+        req_beds_lost = req_bedwars.get('beds_lost_bedwars')
+        if req_beds_lost is None or req_beds_lost == 0:
+            req_beds_lost = 1
         if req_final_kills is None:
             req_final_kills = 0
         req_final_deaths = req_bedwars.get('final_deaths_bedwars')
         if req_final_deaths is None:
             req_final_deaths = 1
-        return [req_displayname, req_bedwars_level, req_final_kills, req_final_deaths, req_uuid, req_xp]
+        return [req_displayname, req_bedwars_level, req_final_kills, req_final_deaths, req_uuid, req_xp, 0,
+                req_beds_broken, req_beds_lost]
 
     def get_stats_name(self, name):  # NEW
         name = name.strip()
@@ -167,7 +174,7 @@ class Frame(QMainWindow):
         if req_player is not None:
             return self.get_bw_stats(req_player)
 
-# WHERE last_thread_line
+    # WHERE last_thread_line
 
     def get_stats_uuid(self, uuid):  # NEW
         url = f"https://api.hypixel.net/player?key={self.API_key}&uuid={uuid}"
@@ -188,22 +195,20 @@ class Frame(QMainWindow):
             new_player = new_player_stats[0]
         else:
             new_player_stats = self.get_stats_name(new_player)
+            new_player = new_player_stats[0]
 
         if new_player not in self.party_members:
-            new_player_stats = self.get_stats(new_player)
-            if (new_player_stats == None):
-                print("Request failed!")
-                return
             # self.party_members.append(new_player)
             # playerlist sorting:
             pos = -1
             for i in range(len(self.party_stats)):
-                if (self.party_stats[i][1] > new_player_stats[1]):
+                if self.party_stats[i][1] < new_player_stats[1]:
                     pos = i
                     break
 
-            if (pos == -1):
-                pos = self.table.rowCount()
+            if pos == -1:
+                pos = len(self.party_members)
+
             self.party_members.append("")
             self.party_stats.append([])
 
@@ -213,6 +218,9 @@ class Frame(QMainWindow):
                 cur_stats, self.party_stats[i] = self.party_stats[i], cur_stats
 
             # GUI table updating:
+            # if pos == -1:
+            #     pos = self.table.rowCount()
+
             self.table.insertRow(pos)
             self.table.setItem(pos, 0, QTableWidgetItem(new_player_stats[0]))
             self.table.setItem(pos, 1, QTableWidgetItem(
@@ -244,7 +252,7 @@ class Frame(QMainWindow):
                 # kicked_player_stats_after = self.get_stats(kicked_player)
                 ps_index = 'wrong index'
                 for elem in self.party_stats:
-                    if elem[0] == kicked_player[0]:
+                    if elem[0] == kicked_player:
                         ps_index = self.party_stats.index(elem)
                 kicked_player_stats_after = self.get_stats_uuid(
                     self.party_stats[ps_index][4])
@@ -258,8 +266,6 @@ class Frame(QMainWindow):
             print(f'ERROR: {kicked_player} is not in the list')
 
     def disband_party(self):
-        '''global self.party_stats
-        global self.party_members'''
         player_leave_time = str(datetime.now())[
             :10] + '_' + str(datetime.now())[11:16]
         if self.party_members != [self.user_ign]:
@@ -268,7 +274,7 @@ class Frame(QMainWindow):
             if sa_player != self.user_ign:
                 ps_index = 'wrong index'
                 for elem in self.party_stats:
-                    if elem[0] == sa_player[0]:
+                    if elem[0] == sa_player:
                         ps_index = self.party_stats.index(elem)
                 kicked_player_stats_after = self.get_stats_uuid(
                     self.party_stats[ps_index][4])
@@ -276,61 +282,57 @@ class Frame(QMainWindow):
                 self.stats_after.append(kicked_player_stats_after)
 
         self.table.clear()
-        self.table.setRowCount(0)
+        self.table.setRowCount(1)
 
-        self.party_stats = []
-        self.party_members = []
-        # quick fix,
-        # TODO: re-do this nightmare
-        self.add_player(self.user_ign)
-        # self.party_stats = [self.party_stats[0]]
-        # self.party_members = [self.party_members[0]]
+        for i in self.party_stats:
+            if i[0] == self.user_ign:
+                self.party_stats = i[0]
+                break
+
+        self.party_members = [self.user_ign]
 
     def check_client(self):
-        # BEFORE_COMMIT uncomment
-        return "./latest.log"
-        # client = 0
-        # edit_last_changed = 0
-        # for i in self.client_list:
-        #     if os.path.exists(i):
-        #         if os.stat(i).st_mtime > edit_last_changed:
-        #             edit_last_changed = os.stat(i).st_mtime
-        #             client = i
-        # if client != 0:
-        #     return client
-        # else:
-        #     print("You don't have minecraft installed")
+        # # BEFORE_COMMIT uncomment
+        # return "./latest.log"
+        client = 0
+        edit_last_changed = 0
+        for i in self.client_list:
+            if os.path.exists(i):
+                if os.stat(i).st_mtime > edit_last_changed:
+                    edit_last_changed = os.stat(i).st_mtime
+                    client = i
+        if client != 0:
+            return client
+        else:
+            print("You don't have minecraft installed")
 
     def choose_mode(self):
-        '''global self.baldstats_mode
-        global self.mode_remembered'''
         self.baldstats_mode = False
         self.mode_remembered = False
         if os.path.exists(self.cfg_file):
             with open(self.cfg_file) as cfg:
                 for cfg_line in cfg:
                     s = cfg_line.split('=')
-                    if s[0] == 'self.remember_mode':
+                    if s[0] == 'remember_mode':
                         self.mode_remembered = True
-                        if s[1].strip() == 'self.log_file':
-                            self.baldstats_mode = 'self.log_file'
+                        if s[1].strip() == 'log_file':
+                            self.baldstats_mode = 'log_file'
                         elif s[1].strip() == 'api':
                             self.baldstats_mode = 'api'
         if not self.baldstats_mode:
             print('CHOOSE BALDSTATS MODE')
-            print('Type 1 to get stats from the log file (updates in real time, unable to track stats of nicked players)')
+            print(
+                'Type 1 to get stats from the log file (updates in real time, unable to track stats of nicked players)')
             print('Type 2 to get stats from the API (updates once every 30 seconds, tracks stats of nicked players)')
             m = int(input())
             if m == 1:
-                self.baldstats_mode = 'self.log_file'
+                self.baldstats_mode = 'log_file'
             elif m == 2:
                 self.baldstats_mode = 'api'
             else:
                 raise SystemError
 
     def remember_mode(self):
-        '''global self.baldstats_mode
-        global self.mode_remembered'''
         if not self.mode_remembered:
             print('Do you want to remember your choice?')
             print('y - yes')
@@ -338,12 +340,10 @@ class Frame(QMainWindow):
             m = input()
             if m == 'y':
                 with open(self.cfg_file, 'a+') as cfg:
-                    # self moment
                     cfg.write(
-                        f'self.remember_mode={self.baldstats_mode}' + '\n')
+                        f'remember_mode={self.baldstats_mode}' + '\n')
 
     def get_api_key(self):
-        # global self.API_key
         apikey = False
         api_key_check = False
         if os.path.exists(self.cfg_file):
@@ -373,8 +373,6 @@ class Frame(QMainWindow):
                     api_key_check = True
 
     def get_name(self):
-        '''global self.party_stats
-        global self.user_ign'''
         if os.path.exists(self.cfg_file):
             with open(self.cfg_file) as cfg:
                 ign_entered = False
@@ -406,8 +404,6 @@ class Frame(QMainWindow):
                         self.user_ign = self.party_members[0]
 
     def get_client(self):
-        '''global self.log_file
-        global self.client_list'''
         lunar_client = f"C:/Users/{self.user}/.lunarclient/offline/1.8/logs/latest.log"
         minecraft_client = f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/latest.log"
         badlion_client = f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/blclient/chat/latest.log"
@@ -444,10 +440,6 @@ class Frame(QMainWindow):
         self.party_arr = []
 
     def start_session(self):
-        '''global self.session_start_time
-        global self.stats_before
-        global self.session_is_started
-        global self.party_stats'''
         self.session_start_time = str(datetime.now())[
             :10] + '_' + str(datetime.now())[11:16]
         for elem in self.party_stats:
@@ -488,13 +480,25 @@ class Frame(QMainWindow):
             del self.stats_before[_ind]
             with open(self.stats_file, 'a+') as ss:
                 ss.write(
-                    f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress} {sa_join_time} {sa_leave_time}' + '\n')
+                    f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress}'
+                    f' {sa_join_time} {sa_leave_time}' + '\n')
+        with open(self.stats_file, 'a+') as ss:
+            ss.write('events: ')
+        with open(self.stats_file, 'a+') as ss:
+            for event in self.events:
+                ss.write(f'{event[0]}; {event[1]}; {event[2]}, ')
         with open(self.stats_file, 'a+') as ss:
             ss.write(f'SESSION ENDED {session_end_time}' + '\n')
             ss.write('\n')
 
+    def create_event(self, name, event):
+        event_time = str(datetime.now())[:10] + \
+            '_' + str(datetime.now())[11:19]
+        single_event = [name, event, event_time]
+        self.events.append(single_event)
+
     def watch_logs(self):
-        while not self.session_is_over:
+        while not self.session_is_over and self.thread_running:
             if os.stat(self.log_file).st_mtime > self.log_file_last_changed:
                 with open(self.log_file) as f:
                     length = len(f.readlines())
@@ -506,7 +510,7 @@ class Frame(QMainWindow):
                         self.log_file).st_mtime
                     self.current_line = line + 1
 
-                    if last_line[11:31] == '[Client thread/INFO]' or last_line == 'close_program':
+                    if last_line[11:31] == '[Client thread/INFO]':
                         self.last_thread_line = last_line
                         self.signal.process_logfile_line.emit()
             else:
@@ -514,39 +518,41 @@ class Frame(QMainWindow):
 
     def main_cycle(self):
         last_line = self.last_thread_line
-        if (last_line[-1] == '.' or last_line[-1] == '!'):
-            del last_line[-1]
         s = last_line.split()[4:]
-        len_s = len(s)
+        if s[-1][-1] == '.' or s[-1][-1] == '!': # unnecessary solution
+            s[-1] = s[-1][:-1]
 
-        if last_line == 'close_program':  # nado pomenyat na zakrytie programmy kogda budet gui
-            if self.session_is_started:
-                self.end_session()
-                self.session_is_over = True
-            exit(0)
-            return  # end thread
-
-        if s == ['Protect', 'your', 'bed', 'and', 'destroy', 'the', 'enemy', 'beds']:
-            if not self.session_is_started:
-                self.start_session()
-        if self.session_is_over:
-            if len_s > 0:
-                if not s[0] == '-----------------------------':
-                    for n in s:
-                        self.party_arr.append(n)
-                else:
-                    self.session_is_over = False
-                    self.party_adjust(self.party_arr)
-        if len_s > 1:
-            if s[0] == 'Party' and s[1] == 'Members':
-                self.session_is_over = True
         for i in range(len(s)):
             if s[i][0] == '[' and s[i][-1] == ']':
                 del s[i]
                 break
-        # USELESS
-        # len_s = len(s)
-        if len_s == 4:
+
+        if s == ['Protect', 'your', 'bed', 'and', 'destroy', 'the', 'enemy', 'beds']:
+            if not self.session_is_started:
+                self.start_session()
+            self.create_event('event-', 'game_started')
+        if self.party_check:
+            if len(s) > 0:
+                if not s[0] == '-----------------------------':
+                    for n in s:
+                        self.party_arr.append(n)
+                else:
+                    self.party_check = False
+                    self.party_adjust(self.party_arr)
+        if self.game_ended_check:
+            if len(s) > 2:
+                if s[1] == '-':
+                    if s[2][:-1] in self.party_members:
+                        self.create_event('event-', 'game_won')
+                    else:
+                        self.create_event('event-', 'game_lost')
+                    self.game_ended_check = False
+        if len(s) > 1:
+            if s[0] == 'Party' and s[1] == 'Members':
+                self.party_check = True
+            elif s[1] == '????????????????????????????????????????????????????????????????':
+                self.game_ended_check = True
+        if len(s) == 4:
             # player joins the party (works)
             if s[1] == 'joined' and s[3] == 'party':
                 self.add_player(s[0])
@@ -555,7 +561,7 @@ class Frame(QMainWindow):
                 self.disband_party()
                 print('You left the party')
 
-        if len_s == 5:
+        if len(s) == 5:
             # player leaves the party (works)
             if s[2] == 'left' and s[4] == 'party':
                 self.remove_player(s[0])
@@ -570,7 +576,22 @@ class Frame(QMainWindow):
             elif s[1] == 'has' and s[2] == 'disbanded':
                 self.disband_party()
 
-        if len_s == 7:
+        if len(s) == 6:
+            if s[0] == 'Your' and s[2] == 'API':
+                with open(self.cfg_file) as cfg:
+                    for cfg_line in cfg:
+                        st = cfg_line.split('=')
+                        if st[0] == 'API_KEY':
+                            old_api = st[1].strip()
+                self.API_key = s[5]
+                with open(self.cfg_file, 'r') as f:
+                    old_data = f.read()
+                new_data = old_data.replace(f'{old_api}', f'{self.API_key}')
+                with open(self.cfg_file, 'w') as f:
+                    f.write(new_data)
+                print('Your API key was updated')
+
+        if len(s) == 7:
             # player gets removed from the party (should work)
             if s[1] == 'has' and s[3] == 'removed':
                 self.remove_player(s[0])
@@ -578,23 +599,23 @@ class Frame(QMainWindow):
             if s[0] == 'You' and s[2] == 'not' and s[6] == 'party':
                 self.disband_party()
 
-        if len_s == 9:
+        if len(s) == 9:
             # player gets removed from the party (should work)
             if s[1] == 'was' and s[2] == 'removed':
                 self.remove_player(s[0])
 
-        if len_s == 14:
+        if len(s) == 14:
             # the party gets disbanded (idk if it works)
             if s[1] == 'party' and s[3] == 'disbanded':
                 self.disband_party()
 
-        if len_s > 0:
+        if len(s) > 0:
             if s[0] == "You'll":
                 # You join a party with multiple players in it (works)
                 s2 = last_line.split(':')
                 namelist = []
                 s = s2[3].split()
-                if len_s >= 4:
+                if len(s) >= 4:
                     if s[1] == "You'll":
                         pl = s2[4].split(',')
                         for m in pl:
@@ -616,12 +637,41 @@ class Frame(QMainWindow):
                             print(self.stats_before)
                             print(self.party_stats)
                             self.print_stats()
+                if last_line[-19:] == 'fell into the void.':
+                    player = s[0]
+                    if player in self.party_members:
+                        for fv_player in self.party_stats:
+                            if fv_player[0] == player:
+                                fv_player[6] += 1
+                                self.create_event(f'{player}', 'voided')
+                if len(s) > 1:
+                    if s[0] == 'BED' and s[1] == 'DESTROYED':
+                        player = s[0]
+                        if player in self.party_members:
+                            for fv_player in self.party_stats:
+                                if fv_player[0] == player:
+                                    fv_player[7] += 1
+                                    self.create_event(
+                                        f'{player}', 'bed_broken')
+                        if 'Your bed' in last_line:
+                            self.create_event(f'{player}', 'bed_lost')
+                            for fv_player in self.party_stats:
+                                fv_player[8] += 1
             elif self.baldstats_mode == 'api':
                 if self.cd <= time.time() - 8:
                     self.cd = time.time()
-                    for i in self.party_stats:
-                        self.get_stats_uuid(i[4])
+                    for i in range(len(self.party_stats)):
+                        self.party_stats[i] = self.get_stats_uuid(
+                            self.party_stats[i][4])
                     self.print_stats()
+
+    def closeEvent(self, event):
+        self.thread_running = False
+        self.logfile_thread.join()
+        if self.session_is_started:
+            self.end_session()
+            self.session_is_over = True
+        event.accept()
 
 
 if __name__ == '__main__':
