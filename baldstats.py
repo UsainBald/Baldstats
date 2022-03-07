@@ -14,34 +14,69 @@ class Communicate(QObject):
     process_logfile_line = pyqtSignal()
 
 
-class Frame(QMainWindow):
+class Frame(QWidget):
     def __init__(self):
         super().__init__()
         # TODO: API new (for first-time users)
         # TODO: window close
 
-        # self.verticalLayout = QVBoxLayout(self)
-        # self.table = QTableWidget(self.verticalLayout)
-        # self.verticalLayout.addWidget(self.table)
+        self.setWindowTitle("BaldStats testing")
+        self.setMinimumSize(1000, 600)
+        self.menu_bar = QMenuBar()
+        self.settings_menu = QMenu("&Settings", self)
 
-        self.table = QTableWidget(self)
-        self.table.move(30, 30)
+        self.stats_history_menu = QMenu("St&ats history", self)
+        self.help_menu = QMenu("&Help", self)
+        self.menu_bar.addMenu(self.settings_menu)
+        self.menu_bar.addMenu(self.stats_history_menu)
+        self.menu_bar.addMenu(self.help_menu)
+        self.menu_bar.setDisabled(True)
+
+        self.main_layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        # TODO: remove old_tab
+        self.old_tab = QWidget()
+        self.session_stats_tab = QWidget()
+        self.overall_stats_tab = QWidget()
+        self.game_stats_tab = QWidget()
+        self.overlay_stats_tab = QWidget()
+
+        self.session_stats_tab_layout = QVBoxLayout(self.session_stats_tab)
+        self.overall_stats_tab_layout = QVBoxLayout(self.overall_stats_tab)
+        self.session_stats_table = QTableWidget()
+        self.overall_stats_table = QTableWidget()
+        self.session_stats_tab_layout.addWidget(self.session_stats_table)
+        self.overall_stats_tab_layout.addWidget(self.overall_stats_table)
+        self.session_stats_table.setColumnCount(8)
+        self.overall_stats_table.setColumnCount(9)
+        self.session_stats_table.setHorizontalHeaderLabels(
+            ["Name", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "Void deaths"])
+        self.overall_stats_table.setHorizontalHeaderLabels(
+            ["Name", "Stars", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "BBLR"])
+
+        self.tabs.addTab(self.old_tab, "Old tab")
+        self.tabs.addTab(self.session_stats_tab, "Session stats")
+        self.tabs.addTab(self.overall_stats_tab, "Overall stats")
+        self.tabs.addTab(self.game_stats_tab, "Game stats")
+        self.tabs.addTab(self.overlay_stats_tab, "Overlay stats")
+        # TODO: less importans tabs
+        self.tabs.setTabEnabled(3, False)
+        self.tabs.setTabEnabled(4, False)
+
+        self.main_layout.setMenuBar(self.menu_bar)
+        self.main_layout.addWidget(self.tabs)
+        self.show()
+        print('UI init completed')
+
+        ####################
+
+        # TODO: remove self.table
+        self.table = QTableWidget(self.old_tab)
+        self.table.move(0, 0)
         self.table.setMinimumSize(600, 400)
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(
             ["Name", "Level", "FKDR", "Final kills", "Final deaths"])
-        self.setMinimumSize(800, 600)
-
-        self.setWindowTitle("BaldStats testing")
-        self.menu_bar = QMenuBar(self)
-        self.setMenuBar(self.menu_bar)
-        self.edit_menu = QMenu("&Edit", self)
-        self.help_menu = QMenu("&Help", self)
-        self.menu_bar.addMenu(self.edit_menu)
-        self.menu_bar.addMenu(self.help_menu)
-
-        self.show()
-        print('UI init completed')
 
         self.user = (getpass.getuser())
         # BEFORE_COMMIT uncomment
@@ -94,11 +129,19 @@ class Frame(QMainWindow):
 
         # self.main_cycle()
 
+        # TODO: fix AttributeError: 'Frame' object has no attribute 'logfile_thread'
         self.thread_running = True
         self.signal = Communicate()
         self.signal.process_logfile_line.connect(self.main_cycle)
         self.logfile_thread = Thread(target=self.watch_logs)
         self.logfile_thread.start()
+
+    def ui_show_settings_dialog(self):
+        dialog = QDialog()
+        button = QPushButton("Press me!", dialog)
+        dialog.setWindowTitle("Settings dialog")
+        dialog.setWindowModality(Qt.ApplicationModal)
+        dialog.exec_()
 
     def print_stats(self):  # nado ubrat' kogda gui budet
         for current_player in self.party_stats:
@@ -519,7 +562,7 @@ class Frame(QMainWindow):
     def main_cycle(self):
         last_line = self.last_thread_line
         s = last_line.split()[4:]
-        if s[-1][-1] == '.' or s[-1][-1] == '!': # unnecessary solution
+        if s[-1][-1] == '.' or s[-1][-1] == '!':  # unnecessary solution
             s[-1] = s[-1][:-1]
 
         for i in range(len(s)):
