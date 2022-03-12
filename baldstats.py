@@ -12,6 +12,7 @@ from threading import Thread
 
 class Communicate(QObject):
     process_logfile_line = pyqtSignal()
+    update_table = pyqtSignal()
 
 
 class Frame(QWidget):
@@ -88,6 +89,7 @@ class Frame(QWidget):
         # self.API_key = "f57c9f4a-175b-430c-a261-d8c199abd927"
         self.party_members = []
         self.party_stats = []
+        self.party_stats_last = []
         self.log_file = ''
         self.log_file_last_changed = 0
         self.current_line = 0
@@ -135,6 +137,23 @@ class Frame(QWidget):
         self.signal.process_logfile_line.connect(self.main_cycle)
         self.logfile_thread = Thread(target=self.watch_logs)
         self.logfile_thread.start()
+
+        self.table_thread = Thread(target=self.update_table)
+        self.table_thread.start()
+
+    def update_table(self):
+        while True:
+            if len(self.party_stats) == len(self.party_stats_last):
+                for i in range(len(self.party_stats)):
+                    for j in range(len(self.party_stats_last[i])):
+                        if self.party_stats[i][j] != self.party_stats_last[i][j]:
+                            print(
+                                i, j, self.party_stats[i][j], self.party_stats_last[i][j])
+                            self.overall_stats_table.setItem(
+                                i, j, QTableWidgetItem(str(self.party_stats[i][j])))
+
+            self.party_stats_last = [i[:] for i in self.party_stats]
+            time.sleep(0.1)
 
     def ui_show_settings_dialog(self):
         dialog = QDialog()
@@ -195,7 +214,7 @@ class Frame(QWidget):
         req_bedwars = req_stats.get('Bedwars')
         req_xp = req_bedwars.get('Experience')
         req_final_kills = req_bedwars.get('final_kills_bedwars')
-        req_beds_broken = req_bedwars.get('bedwars_beds')
+        req_beds_broken = req_bedwars.get('beds_broken_bedwars')
         if req_beds_broken is None:
             req_beds_broken = 0
         req_beds_lost = req_bedwars.get('beds_lost_bedwars')
@@ -264,16 +283,25 @@ class Frame(QWidget):
             # if pos == -1:
             #     pos = self.table.rowCount()
 
-            self.table.insertRow(pos)
-            self.table.setItem(pos, 0, QTableWidgetItem(new_player_stats[0]))
-            self.table.setItem(pos, 1, QTableWidgetItem(
-                str(new_player_stats[1])))
-            self.table.setItem(pos, 2, QTableWidgetItem(
+            self.overall_stats_table.insertRow(pos)
+            self.overall_stats_table.setItem(
+                pos, 0, QTableWidgetItem(new_player_stats[0]))
+            self.overall_stats_table.setItem(
+                pos, 1, QTableWidgetItem(str(new_player_stats[1])))
+            self.overall_stats_table.setItem(
+                pos, 2, QTableWidgetItem(str(new_player_stats[2])))
+            self.overall_stats_table.setItem(
+                pos, 3, QTableWidgetItem(str(new_player_stats[3])))
+            self.overall_stats_table.setItem(pos, 4, QTableWidgetItem(
                 str(round(new_player_stats[2] / new_player_stats[3], 3))))
-            self.table.setItem(pos, 3, QTableWidgetItem(
-                str(new_player_stats[2])))
-            self.table.setItem(pos, 4, QTableWidgetItem(
-                str(new_player_stats[3])))
+            self.overall_stats_table.setItem(
+                pos, 5, QTableWidgetItem("no data"))
+            self.overall_stats_table.setItem(
+                pos, 6, QTableWidgetItem("no data"))
+            self.overall_stats_table.setItem(
+                pos, 7, QTableWidgetItem("now dta"))
+            self.overall_stats_table.setItem(pos, 8, QTableWidgetItem(
+                str(round(new_player_stats[7] / new_player_stats[8], 3))))
 
             if self.session_is_started:
                 player_join_time = str(datetime.now())[
@@ -301,7 +329,9 @@ class Frame(QWidget):
                     self.party_stats[ps_index][4])
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
-            self.table.removeRow(self.party_members.index(kicked_player))
+
+            self.overall_stats_table.removeRow(
+                self.party_members.index(kicked_player))
             del self.party_stats[self.party_members.index(kicked_player)]
             del self.party_members[self.party_members.index(kicked_player)]
             print(f"{kicked_player} was removed")
@@ -324,8 +354,8 @@ class Frame(QWidget):
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
 
-        self.table.clear()
-        self.table.setRowCount(1)
+        self.overall_stats_table.clear()
+        self.overall_stats_table.setRowCount(1)
 
         for i in self.party_stats:
             if i[0] == self.user_ign:
@@ -561,9 +591,9 @@ class Frame(QWidget):
 
     def main_cycle(self):
         last_line = self.last_thread_line
+        if last_line[-1] == '.' or last_line[-1] == '!':  # unnecessary solution
+            last_line = last_line[:-1]
         s = last_line.split()[4:]
-        if s[-1][-1] == '.' or s[-1][-1] == '!':  # unnecessary solution
-            s[-1] = s[-1][:-1]
 
         for i in range(len(s)):
             if s[i][0] == '[' and s[i][-1] == ']':
@@ -667,8 +697,8 @@ class Frame(QWidget):
                             namelist.append(ap)
                         self.mt_request(namelist)
         if self.session_is_started:
-            if self.baldstats_mode == 'self.log_file':
-                if last_line[-11:] == 'FINAL KILL!':
+            if self.baldstats_mode == 'log_file':
+                if last_line[-10:] == 'FINAL KILL':
                     for player in self.party_members:
                         if player in last_line:
                             a = self.party_members.index(
@@ -680,7 +710,7 @@ class Frame(QWidget):
                             print(self.stats_before)
                             print(self.party_stats)
                             self.print_stats()
-                if last_line[-19:] == 'fell into the void.':
+                if last_line[-18:] == 'fell into the void':
                     player = s[0]
                     if player in self.party_members:
                         for fv_player in self.party_stats:
