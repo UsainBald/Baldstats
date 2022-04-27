@@ -20,6 +20,8 @@ class Frame(QWidget):
         super().__init__()
         # TODO: API new (for first-time users)
         # TODO: window close
+        # TODO: fix first launch
+        self.bool_debug_is_enabled = False
 
         self.setWindowTitle("BaldStats testing")
         self.setMinimumSize(1000, 600)
@@ -35,8 +37,7 @@ class Frame(QWidget):
 
         self.main_layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
-        # TODO: remove old_tab
-        self.old_tab = QWidget()
+
         self.session_stats_tab = QWidget()
         self.overall_stats_tab = QWidget()
         self.game_stats_tab = QWidget()
@@ -55,7 +56,6 @@ class Frame(QWidget):
         self.overall_stats_table.setHorizontalHeaderLabels(
             ["Name", "Stars", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "BBLR"])
 
-        self.tabs.addTab(self.old_tab, "Old tab")
         self.tabs.addTab(self.session_stats_tab, "Session stats")
         self.tabs.addTab(self.overall_stats_tab, "Overall stats")
         self.tabs.addTab(self.game_stats_tab, "Game stats")
@@ -71,30 +71,26 @@ class Frame(QWidget):
 
         ####################
 
-        # TODO: remove self.table
-        self.table = QTableWidget(self.old_tab)
-        self.table.move(0, 0)
-        self.table.setMinimumSize(600, 400)
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(
-            ["Name", "Level", "FKDR", "Final kills", "Final deaths"])
-
         self.user = (getpass.getuser())
         # BEFORE_COMMIT uncomment
-        self.cfg_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/settings.cfg"
-        self.stats_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/session_stats.txt"
-        # self.cfg_file = f"./settings.cfg"
-        # self.stats_file = f"./session_stats.txt"
+        if self.bool_debug_is_enabled:
+            self.cfg_file = f"./settings.cfg"
+            self.stats_file = f"./session_stats.txt"
+        else:
+            self.cfg_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/settings.cfg"
+            self.stats_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/session_stats.txt"
 
         # self.API_key = "f57c9f4a-175b-430c-a261-d8c199abd927"
         self.party_members = []
         self.party_stats = []
-        self.party_stats_last = []
+        self.party_stats_last = []  # for threading and table updating
         self.log_file = ''
         self.log_file_last_changed = 0
         self.current_line = 0
         self.cd = 0
         self.session_start_time = ''
+        self.game_stats = []
+        self.game_stats_history = []
         self.stats_before = []
         self.stats_after = []
         self.API_key = ''
@@ -107,7 +103,7 @@ class Frame(QWidget):
         self.events = []
 
         # BEFORE_COMMIT uncomment
-        if not os.path.exists(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats"):
+        if not self.bool_debug_is_enabled and not os.path.exists(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats"):
             os.mkdir(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats")
 
         self.get_api_key()
@@ -144,13 +140,48 @@ class Frame(QWidget):
     def update_table(self):
         while True:
             if len(self.party_stats) == len(self.party_stats_last):
-                for i in range(len(self.party_stats)):
-                    for j in range(len(self.party_stats_last[i])):
-                        if self.party_stats[i][j] != self.party_stats_last[i][j]:
-                            print(
-                                i, j, self.party_stats[i][j], self.party_stats_last[i][j])
-                            self.overall_stats_table.setItem(
-                                i, j, QTableWidgetItem(str(self.party_stats[i][j])))
+                if self.party_stats != self.party_stats_last:
+                    for i in range(len(self.party_stats)):
+
+                        self.overall_stats_table.setItem(
+                            i, 2, QTableWidgetItem(str(self.party_stats[i][2])))
+                        self.overall_stats_table.setItem(
+                            i, 3, QTableWidgetItem(str(self.party_stats[i][3])))
+                        self.overall_stats_table.setItem(
+                            i, 4, QTableWidgetItem(str(round(self.party_stats[i][2] / self.party_stats[i][3], 3))))
+                        self.overall_stats_table.setItem(
+                            i, 5, QTableWidgetItem(str(self.party_stats[i][9])))
+                        self.overall_stats_table.setItem(
+                            i, 6, QTableWidgetItem(str(self.party_stats[i][10])))
+                        self.overall_stats_table.setItem(
+                            i, 7, QTableWidgetItem(str(round(self.party_stats[i][9] / self.party_stats[i][10], 3))))
+                        self.overall_stats_table.setItem(
+                            i, 8, QTableWidgetItem(str(round(self.party_stats[i][7] / self.party_stats[i][8], 3))))
+
+                        self.session_stats_table.setItem(
+                            i, 1, QTableWidgetItem(str(self.party_stats[i][2] - self.stats_before[i][2])))
+                        self.session_stats_table.setItem(
+                            i, 2, QTableWidgetItem(str(self.party_stats[i][3] - self.stats_before[i][3])))
+                        if self.party_stats[i][3] - self.stats_before[i][3] == 0:
+                            self.session_stats_table.setItem(
+                                i, 3, QTableWidgetItem(str(round((self.party_stats[i][2] - self.stats_before[i][2])))))
+                        else:
+                            self.session_stats_table.setItem(
+                                i, 3, QTableWidgetItem(str(round((self.party_stats[i][2] - self.stats_before[i][2]) /
+                                    (self.party_stats[i][3] - self.stats_before[i][3]), 3))))
+                        self.session_stats_table.setItem(
+                            i, 4, QTableWidgetItem(str(self.party_stats[i][9] - self.stats_before[i][9])))
+                        self.session_stats_table.setItem(
+                            i, 5, QTableWidgetItem(str(self.party_stats[i][10] - self.stats_before[i][10])))
+                        if self.party_stats[i][10] - self.stats_before[i][10] == 0:
+                            self.session_stats_table.setItem(
+                                i, 6, QTableWidgetItem(str(round((self.party_stats[i][9] - self.stats_before[i][9])))))
+                        else:
+                            self.session_stats_table.setItem(
+                                i, 6, QTableWidgetItem(str(round((self.party_stats[i][9] - self.stats_before[i][9]) /
+                                    (self.party_stats[i][10] - self.stats_before[i][10]), 3))))
+                        self.session_stats_table.setItem(
+                            i, 7, QTableWidgetItem(str(self.party_stats[i][6])))
 
             self.party_stats_last = [i[:] for i in self.party_stats]
             time.sleep(0.1)
@@ -192,7 +223,7 @@ class Frame(QWidget):
                 session_final_kills / session_final_deaths, 2))
             print(f"{session_displayname}'s final kills =", session_final_kills)
 
-    def check_name(self, ign):  # NEW
+    def check_name(self, ign):
         url = f"https://api.hypixel.net/player?key={self.API_key}&name={ign}"
         req = requests.get(url).json()
         cn_player = req.get('player')
@@ -215,6 +246,12 @@ class Frame(QWidget):
         req_xp = req_bedwars.get('Experience')
         req_final_kills = req_bedwars.get('final_kills_bedwars')
         req_beds_broken = req_bedwars.get('beds_broken_bedwars')
+        req_wins = req_achievements.get('bedwars_wins')
+        req_losses = req_bedwars.get('losses_bedwars')
+        if req_wins is None:
+            req_wins = 0
+        if req_losses is None:
+            req_losses = 1
         if req_beds_broken is None:
             req_beds_broken = 0
         req_beds_lost = req_bedwars.get('beds_lost_bedwars')
@@ -226,9 +263,9 @@ class Frame(QWidget):
         if req_final_deaths is None:
             req_final_deaths = 1
         return [req_displayname, req_bedwars_level, req_final_kills, req_final_deaths, req_uuid, req_xp, 0,
-                req_beds_broken, req_beds_lost]
+                req_beds_broken, req_beds_lost, req_wins, req_losses]
 
-    def get_stats_name(self, name):  # NEW
+    def get_stats_name(self, name):
         name = name.strip()
         url = f"https://api.hypixel.net/player?key={self.API_key}&name={name}"
         req = requests.get(url).json()
@@ -238,7 +275,7 @@ class Frame(QWidget):
 
     # WHERE last_thread_line
 
-    def get_stats_uuid(self, uuid):  # NEW
+    def get_stats_uuid(self, uuid):
         url = f"https://api.hypixel.net/player?key={self.API_key}&uuid={uuid}"
         req = requests.get(url).json()
         req_player = req.get('player')
@@ -283,6 +320,7 @@ class Frame(QWidget):
             # if pos == -1:
             #     pos = self.table.rowCount()
 
+            # overall table updating
             self.overall_stats_table.insertRow(pos)
             self.overall_stats_table.setItem(
                 pos, 0, QTableWidgetItem(new_player_stats[0]))
@@ -295,18 +333,39 @@ class Frame(QWidget):
             self.overall_stats_table.setItem(pos, 4, QTableWidgetItem(
                 str(round(new_player_stats[2] / new_player_stats[3], 3))))
             self.overall_stats_table.setItem(
-                pos, 5, QTableWidgetItem("no data"))
+                pos, 5, QTableWidgetItem(str(new_player_stats[9])))
             self.overall_stats_table.setItem(
-                pos, 6, QTableWidgetItem("no data"))
+                pos, 6, QTableWidgetItem(str(new_player_stats[10])))
             self.overall_stats_table.setItem(
-                pos, 7, QTableWidgetItem("now dta"))
+                pos, 7, QTableWidgetItem(str(round(new_player_stats[9] / new_player_stats[10], 3))))
             self.overall_stats_table.setItem(pos, 8, QTableWidgetItem(
                 str(round(new_player_stats[7] / new_player_stats[8], 3))))
+
+            # session table updating
+            self.session_stats_table.insertRow(pos)
+            self.session_stats_table.setItem(
+                pos, 0, QTableWidgetItem(new_player_stats[0]))
+            self.session_stats_table.setItem(
+                pos, 1, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(
+                pos, 2, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(
+                pos, 3, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(
+                pos, 4, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(
+                pos, 5, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(
+                pos, 6, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(
+                pos, 7, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(
+                pos, 8, QTableWidgetItem("0"))
 
             if self.session_is_started:
                 player_join_time = str(datetime.now())[
                     :10] + '_' + str(datetime.now())[11:16]
-                x = [i for i in new_player_stats]
+                x = new_player_stats[:]
                 x.append(player_join_time)
                 self.stats_before.append(x)
 
@@ -330,7 +389,10 @@ class Frame(QWidget):
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
 
+            # TODO: re-do kicked player index
             self.overall_stats_table.removeRow(
+                self.party_members.index(kicked_player))
+            self.session_start_time.removeRow(
                 self.party_members.index(kicked_player))
             del self.party_stats[self.party_members.index(kicked_player)]
             del self.party_members[self.party_members.index(kicked_player)]
@@ -366,7 +428,8 @@ class Frame(QWidget):
 
     def check_client(self):
         # # BEFORE_COMMIT uncomment
-        # return "./latest.log"
+        if self.bool_debug_is_enabled:
+            return "./latest.log"
         client = 0
         edit_last_changed = 0
         for i in self.client_list:
@@ -517,6 +580,7 @@ class Frame(QWidget):
             :10] + '_' + str(datetime.now())[11:16]
         for elem in self.party_stats:
             bef = [i for i in elem]
+            self.game_stats.append(bef)
             bef.append(self.session_start_time)
             self.stats_before.append(bef)
         self.session_is_started = True
@@ -617,13 +681,18 @@ class Frame(QWidget):
                 if s[1] == '-':
                     if s[2][:-1] in self.party_members:
                         self.create_event('event-', 'game_won')
+                        for pmember in self.party_stats:
+                            pmember[9] += 1
                     else:
                         self.create_event('event-', 'game_lost')
+                        for pmember in self.party_stats:
+                            pmember[10] += 1
                     self.game_ended_check = False
         if len(s) > 1:
             if s[0] == 'Party' and s[1] == 'Members':
                 self.party_check = True
-            elif s[1] == '????????????????????????????????????????????????????????????????':
+        if len(s) > 0:
+            if s[0] == '????????????????????????????????????????????????????????????????':
                 self.game_ended_check = True
         if len(s) == 4:
             # player joins the party (works)
@@ -745,6 +814,7 @@ class Frame(QWidget):
             self.end_session()
             self.session_is_over = True
         event.accept()
+        return
 
 
 if __name__ == '__main__':
