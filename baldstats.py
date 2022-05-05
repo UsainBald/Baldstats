@@ -19,8 +19,8 @@ class Frame(QWidget):
     def __init__(self):
         super().__init__()
         # TODO: API new (for first-time users)
-        # TODO: window close
-        # TODO: fix first launch
+        # TODO: the gui only updates when you switch to the tab
+        # TODO: fix watch_logs (and threading in general)
         self.bool_debug_is_enabled = False
 
         self.setWindowTitle("BaldStats testing")
@@ -72,6 +72,7 @@ class Frame(QWidget):
         ####################
 
         self.user = (getpass.getuser())
+
         # BEFORE_COMMIT uncomment
         if self.bool_debug_is_enabled:
             self.cfg_file = f"./settings.cfg"
@@ -101,8 +102,8 @@ class Frame(QWidget):
         self.session_is_started = False
         self.last_thread_line = ""
         self.events = []
+        self.uuid_dict = {}
 
-        # BEFORE_COMMIT uncomment
         if not self.bool_debug_is_enabled and not os.path.exists(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats"):
             os.mkdir(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats")
 
@@ -137,52 +138,66 @@ class Frame(QWidget):
         self.table_thread = Thread(target=self.update_table)
         self.table_thread.start()
 
+    def make_table(self):
+        # filling overall table
+        for i in range(len(self.party_stats)):
+            self.overall_stats_table.setItem(
+                i, 0, QTableWidgetItem(str(self.party_stats[i][0])))
+            self.overall_stats_table.setItem(
+                i, 1, QTableWidgetItem(str(self.party_stats[i][1])))
+            self.overall_stats_table.setItem(
+                i, 2, QTableWidgetItem(str(self.party_stats[i][2])))
+            self.overall_stats_table.setItem(
+                i, 3, QTableWidgetItem(str(self.party_stats[i][3])))
+            self.overall_stats_table.setItem(
+                i, 4, QTableWidgetItem(str(round(self.party_stats[i][2] / self.party_stats[i][3], 3))))
+            self.overall_stats_table.setItem(
+                i, 5, QTableWidgetItem(str(self.party_stats[i][9])))
+            self.overall_stats_table.setItem(
+                i, 6, QTableWidgetItem(str(self.party_stats[i][10])))
+            self.overall_stats_table.setItem(
+                i, 7, QTableWidgetItem(str(round(self.party_stats[i][9] / self.party_stats[i][10], 3))))
+            self.overall_stats_table.setItem(
+                i, 8, QTableWidgetItem(str(round(self.party_stats[i][7] / self.party_stats[i][8], 3))))
+
+            # filling session stats table
+            if self.stats_before == []:
+                self.stats_before = [i[:] for i in self.party_stats]
+                self.stats_before.append('bebra')
+            self.session_stats_table.setItem(
+                i, 0, QTableWidgetItem(str(self.party_stats[i][0])))
+            self.session_stats_table.setItem(
+                i, 1, QTableWidgetItem(str(self.party_stats[i][2] - self.stats_before[i][2])))
+            self.session_stats_table.setItem(
+                i, 2, QTableWidgetItem(str(self.party_stats[i][3] - self.stats_before[i][3])))
+            if self.party_stats[i][3] - self.stats_before[i][3] == 0:
+                self.session_stats_table.setItem(
+                    i, 3, QTableWidgetItem(str(round((self.party_stats[i][2] - self.stats_before[i][2])))))
+            else:
+                self.session_stats_table.setItem(
+                    i, 3, QTableWidgetItem(str(round((self.party_stats[i][2] - self.stats_before[i][2]) /
+                                                     (self.party_stats[i][3] - self.stats_before[i][3]), 3))))
+            self.session_stats_table.setItem(
+                i, 4, QTableWidgetItem(str(self.party_stats[i][9] - self.stats_before[i][9])))
+            self.session_stats_table.setItem(
+                i, 5, QTableWidgetItem(str(self.party_stats[i][10] - self.stats_before[i][10])))
+            if self.party_stats[i][10] - self.stats_before[i][10] == 0:
+                self.session_stats_table.setItem(
+                    i, 6, QTableWidgetItem(str(round((self.party_stats[i][9] - self.stats_before[i][9])))))
+            else:
+                self.session_stats_table.setItem(
+                    i, 6, QTableWidgetItem(str(round((self.party_stats[i][9] - self.stats_before[i][9]) /
+                                                     (self.party_stats[i][10] - self.stats_before[i][10]), 3))))
+            self.session_stats_table.setItem(
+                i, 7, QTableWidgetItem(str(self.party_stats[i][6])))
+            if len(self.stats_before) == 2 and self.stats_before[1] == 'bebra':
+                self.stats_before = []
+
     def update_table(self):
         while True:
             if len(self.party_stats) == len(self.party_stats_last):
                 if self.party_stats != self.party_stats_last:
-                    for i in range(len(self.party_stats)):
-
-                        self.overall_stats_table.setItem(
-                            i, 2, QTableWidgetItem(str(self.party_stats[i][2])))
-                        self.overall_stats_table.setItem(
-                            i, 3, QTableWidgetItem(str(self.party_stats[i][3])))
-                        self.overall_stats_table.setItem(
-                            i, 4, QTableWidgetItem(str(round(self.party_stats[i][2] / self.party_stats[i][3], 3))))
-                        self.overall_stats_table.setItem(
-                            i, 5, QTableWidgetItem(str(self.party_stats[i][9])))
-                        self.overall_stats_table.setItem(
-                            i, 6, QTableWidgetItem(str(self.party_stats[i][10])))
-                        self.overall_stats_table.setItem(
-                            i, 7, QTableWidgetItem(str(round(self.party_stats[i][9] / self.party_stats[i][10], 3))))
-                        self.overall_stats_table.setItem(
-                            i, 8, QTableWidgetItem(str(round(self.party_stats[i][7] / self.party_stats[i][8], 3))))
-
-                        self.session_stats_table.setItem(
-                            i, 1, QTableWidgetItem(str(self.party_stats[i][2] - self.stats_before[i][2])))
-                        self.session_stats_table.setItem(
-                            i, 2, QTableWidgetItem(str(self.party_stats[i][3] - self.stats_before[i][3])))
-                        if self.party_stats[i][3] - self.stats_before[i][3] == 0:
-                            self.session_stats_table.setItem(
-                                i, 3, QTableWidgetItem(str(round((self.party_stats[i][2] - self.stats_before[i][2])))))
-                        else:
-                            self.session_stats_table.setItem(
-                                i, 3, QTableWidgetItem(str(round((self.party_stats[i][2] - self.stats_before[i][2]) /
-                                    (self.party_stats[i][3] - self.stats_before[i][3]), 3))))
-                        self.session_stats_table.setItem(
-                            i, 4, QTableWidgetItem(str(self.party_stats[i][9] - self.stats_before[i][9])))
-                        self.session_stats_table.setItem(
-                            i, 5, QTableWidgetItem(str(self.party_stats[i][10] - self.stats_before[i][10])))
-                        if self.party_stats[i][10] - self.stats_before[i][10] == 0:
-                            self.session_stats_table.setItem(
-                                i, 6, QTableWidgetItem(str(round((self.party_stats[i][9] - self.stats_before[i][9])))))
-                        else:
-                            self.session_stats_table.setItem(
-                                i, 6, QTableWidgetItem(str(round((self.party_stats[i][9] - self.stats_before[i][9]) /
-                                    (self.party_stats[i][10] - self.stats_before[i][10]), 3))))
-                        self.session_stats_table.setItem(
-                            i, 7, QTableWidgetItem(str(self.party_stats[i][6])))
-
+                    self.make_table()
             self.party_stats_last = [i[:] for i in self.party_stats]
             time.sleep(0.1)
 
@@ -273,8 +288,6 @@ class Frame(QWidget):
         if req_player is not None:
             return self.get_bw_stats(req_player)
 
-    # WHERE last_thread_line
-
     def get_stats_uuid(self, uuid):
         url = f"https://api.hypixel.net/player?key={self.API_key}&uuid={uuid}"
         req = requests.get(url).json()
@@ -288,13 +301,14 @@ class Frame(QWidget):
                 executor.submit(self.add_player, name)
 
     def add_player(self, new_player):
+        if new_player in self.uuid_dict:
+            new_player = self.uuid_dict[new_player]
         new_player = new_player.strip()
         if len(new_player) > 16:  # checking whether it is an ign or a uuid
             new_player_stats = self.get_stats_uuid(new_player)
-            new_player = new_player_stats[0]
         else:
             new_player_stats = self.get_stats_name(new_player)
-            new_player = new_player_stats[0]
+        new_player = new_player_stats[0]
 
         if new_player not in self.party_members:
             # self.party_members.append(new_player)
@@ -343,91 +357,71 @@ class Frame(QWidget):
 
             # session table updating
             self.session_stats_table.insertRow(pos)
-            self.session_stats_table.setItem(
-                pos, 0, QTableWidgetItem(new_player_stats[0]))
-            self.session_stats_table.setItem(
-                pos, 1, QTableWidgetItem("0"))
-            self.session_stats_table.setItem(
-                pos, 2, QTableWidgetItem("0"))
-            self.session_stats_table.setItem(
-                pos, 3, QTableWidgetItem("0"))
-            self.session_stats_table.setItem(
-                pos, 4, QTableWidgetItem("0"))
-            self.session_stats_table.setItem(
-                pos, 5, QTableWidgetItem("0"))
-            self.session_stats_table.setItem(
-                pos, 6, QTableWidgetItem("0"))
-            self.session_stats_table.setItem(
-                pos, 7, QTableWidgetItem("0"))
-            self.session_stats_table.setItem(
-                pos, 8, QTableWidgetItem("0"))
+            self.session_stats_table.setItem(pos, 0, QTableWidgetItem(new_player_stats[0]))
+
+            for i in range(1, 8):
+                self.session_stats_table.setItem(pos, i, QTableWidgetItem("0"))
 
             if self.session_is_started:
-                player_join_time = str(datetime.now())[
-                    :10] + '_' + str(datetime.now())[11:16]
-                x = new_player_stats[:]
-                x.append(player_join_time)
-                self.stats_before.append(x)
+                player_join_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+                new_player_stats.append(player_join_time)
+                self.stats_before.append(new_player_stats)
 
             print(f'{new_player} was added')
             print(self.party_stats)
             print(self.party_members)
+            self.uuid_dict[new_player] = new_player_stats[4]
+
+    def create_stats_after(self, player_stats):
+        i = []
+        for i in self.stats_before:
+            if i[0] == player_stats[0]:
+                break
+        stars = player_stats[1] - i[1]
+        final_kills = player_stats[2] - i[2]
+        final_deaths = player_stats[3] - i[3]
+        xp = player_stats[5] - i[5]
+        beds_broken = player_stats[7] - i[7]
+        beds_lost = player_stats[8] - i[8]
+        wins = player_stats[9] - i[9]
+        losses = player_stats[10] - i[10]
+
+        return [player_stats[0], stars, final_kills, final_deaths, player_stats[4], xp,
+                player_stats[6], beds_broken, beds_lost, wins, losses]
 
     def remove_player(self, kicked_player):
-        player_leave_time = str(datetime.now())[
-            :10] + '_' + str(datetime.now())[11:16]
+        ps_index = 'wrong index'
+        player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
         kicked_player = kicked_player.strip()
         if kicked_player in self.party_members:
-            if kicked_player in [element for a_list in self.stats_before for element in a_list]:
-                # kicked_player_stats_after = self.get_stats(kicked_player)
-                ps_index = 'wrong index'
-                for elem in self.party_stats:
-                    if elem[0] == kicked_player:
-                        ps_index = self.party_stats.index(elem)
-                kicked_player_stats_after = self.get_stats_uuid(
-                    self.party_stats[ps_index][4])
+            elem = []
+            for elem in self.party_stats:
+                if elem[0] == kicked_player:
+                    ps_index = self.party_stats.index(elem)
+                    break
+            if self.session_is_started:
+                kicked_player_stats_after = self.create_stats_after(elem)
+                kicked_player_stats_after.append(self.stats_before[ps_index][-1])
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
 
-            # TODO: re-do kicked player index
-            self.overall_stats_table.removeRow(
-                self.party_members.index(kicked_player))
-            self.session_start_time.removeRow(
-                self.party_members.index(kicked_player))
-            del self.party_stats[self.party_members.index(kicked_player)]
-            del self.party_members[self.party_members.index(kicked_player)]
+            self.overall_stats_table.removeRow(ps_index)
+            self.session_stats_table.removeRow(ps_index)
+            del self.party_stats[ps_index]
+            for sb_index in self.stats_before:
+                if sb_index[0] == kicked_player:
+                    del sb_index
             print(f"{kicked_player} was removed")
         else:
             print(f'ERROR: {kicked_player} is not in the list')
 
     def disband_party(self):
-        player_leave_time = str(datetime.now())[
-            :10] + '_' + str(datetime.now())[11:16]
-        if self.party_members != [self.user_ign]:
-            print('the party was disbanded')
         for sa_player in self.party_members:
             if sa_player != self.user_ign:
-                ps_index = 'wrong index'
-                for elem in self.party_stats:
-                    if elem[0] == sa_player:
-                        ps_index = self.party_stats.index(elem)
-                kicked_player_stats_after = self.get_stats_uuid(
-                    self.party_stats[ps_index][4])
-                kicked_player_stats_after.append(player_leave_time)
-                self.stats_after.append(kicked_player_stats_after)
-
-        self.overall_stats_table.clear()
-        self.overall_stats_table.setRowCount(1)
-
-        for i in self.party_stats:
-            if i[0] == self.user_ign:
-                self.party_stats = i[0]
-                break
-
+                self.remove_player(sa_player)
         self.party_members = [self.user_ign]
 
     def check_client(self):
-        # # BEFORE_COMMIT uncomment
         if self.bool_debug_is_enabled:
             return "./latest.log"
         client = 0
@@ -486,7 +480,7 @@ class Frame(QWidget):
             with open(self.cfg_file) as cfg:
                 for cfg_line in cfg:
                     s = cfg_line.split('=')
-                    if s[0] == 'self.API_key':
+                    if s[0] == 'API_key':
                         self.API_key = s[1].strip()
                         while not apikey:
                             req_link = f'https://api.hypixel.net/player?key={self.API_key}'
@@ -496,16 +490,15 @@ class Frame(QWidget):
                             else:
                                 apikey = True
         if not apikey:
-            print(
-                'Enter your hypixel API key (you can get it by using /api new on the server)')
+            print('Enter your hypixel API key (you can get it by using /api new on the server)')
             while not api_key_check:
                 self.API_key = input()
-                req_link = f'https://api.hypixel.net/player?key={self.API_key}'
-                if requests.get(req_link) == '<Response [403]>':
+                req_link = f'https://api.hypixel.net/player?key={self.API_key}&uuid=1eb4482cf46248baba0efa3382da4de2'
+                if requests.get(req_link).json().get('player') is None:
                     print('Invalid API key, try again')
                 else:
                     with open(self.cfg_file, 'a+') as cfg:
-                        cfg.write(f'self.API_key={self.API_key}' + '\n')
+                        cfg.write(f'API_key={self.API_key}' + '\n')
                     api_key_check = True
 
     def get_name(self):
@@ -522,8 +515,6 @@ class Frame(QWidget):
             if a != "":
                 ign = a[0]
                 uuid = a[4]
-                self.party_members.append(ign)
-                self.party_stats.append(a)
                 with open(self.cfg_file, 'a+') as cfg:
                     cfg.write(f'Name={ign}={uuid}' + '\n')
                     ign_entered = True
@@ -534,8 +525,7 @@ class Frame(QWidget):
                 if s[0] == 'Name':
                     self.add_player(s[2].strip())
                     if self.party_stats == [None]:
-                        print(
-                            f'ERROR: Unable to get stats of {s[1].strip()}, try restarting the program')
+                        print(f'ERROR: Unable to get stats of {s[1].strip()}, try restarting the program')
                     else:
                         self.user_ign = self.party_members[0]
 
@@ -561,7 +551,6 @@ class Frame(QWidget):
             print("Linked to custom client")
 
     def party_adjust(self, party_array):
-        print(party_array)
         adj_party_members = []
         for i in range(len(party_array)):
             if party_array[i] == '?':
@@ -598,23 +587,17 @@ class Frame(QWidget):
         with open(self.stats_file, 'a+') as ss:
             ss.write(f'SESSION STARTED {self.session_start_time}' + '\n')
         for sa in self.stats_after:
-            _ind = "wrong index"
-            for sb in self.stats_before:
-                if sa[0] == sb[0]:
-                    _ind = self.stats_before.index(sb)
-                    break
             sa_ign = sa[0]
-            sa_final_kills = sa[2] - self.stats_before[_ind][2]
-            sa_final_deaths = sa[3] - self.stats_before[_ind][3]
+            sa_final_kills = sa[2]
+            sa_final_deaths = sa[3]
             if sa_final_deaths == 0:
                 sa_fkdr = sa_final_kills
             else:
                 sa_fkdr = round(sa_final_kills / sa_final_deaths, 2)
-            sa_level_progress = sa[1] - self.stats_before[_ind][1]
-            sa_xp_progress = sa[5] - self.stats_before[_ind][5]
-            sa_join_time = self.stats_before[_ind][6]
+            sa_level_progress = sa[1]
+            sa_xp_progress = sa[5]
+            sa_join_time = 'nado sdelat'
             sa_leave_time = sa[6]
-            del self.stats_before[_ind]
             with open(self.stats_file, 'a+') as ss:
                 ss.write(
                     f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress}'
@@ -639,23 +622,23 @@ class Frame(QWidget):
             if os.stat(self.log_file).st_mtime > self.log_file_last_changed:
                 with open(self.log_file) as f:
                     length = len(f.readlines())
-                print(length)
+                print('logline', length)
                 for line in range(self.current_line, length):
                     with open(self.log_file) as f:
                         last_line = f.readlines()[line].strip()
-                    self.log_file_last_changed = os.stat(
-                        self.log_file).st_mtime
-                    self.current_line = line + 1
-
                     if last_line[11:31] == '[Client thread/INFO]':
+                        self.current_line = line + 1
                         self.last_thread_line = last_line
                         self.signal.process_logfile_line.emit()
+
+                self.log_file_last_changed = os.stat(self.log_file).st_mtime
+
             else:
                 time.sleep(0.5)
 
     def main_cycle(self):
         last_line = self.last_thread_line
-        if last_line[-1] == '.' or last_line[-1] == '!':  # unnecessary solution
+        if last_line[-1] == '.' or last_line[-1] == '!':
             last_line = last_line[:-1]
         s = last_line.split()[4:]
 
@@ -695,26 +678,20 @@ class Frame(QWidget):
             if s[0] == '????????????????????????????????????????????????????????????????':
                 self.game_ended_check = True
         if len(s) == 4:
-            # player joins the party (works)
             if s[1] == 'joined' and s[3] == 'party':
                 self.add_player(s[0])
-            # you leave the party (works)
             if s[0] == 'You' and s[1] == 'left':
                 self.disband_party()
-                print('You left the party')
 
         if len(s) == 5:
-            # player leaves the party (works)
             if s[2] == 'left' and s[4] == 'party':
                 self.remove_player(s[0])
-            # you joined someone else's party (works)
             elif s[0] == 'You' and s[4] == 'party':
                 self.disband_party()
                 if s[3][-1] == "'":
                     self.add_player(s[3][:-1])
                 else:
                     self.add_player(s[3][:-2])
-            # someone disbands the party (should work)
             elif s[1] == 'has' and s[2] == 'disbanded':
                 self.disband_party()
 
@@ -734,26 +711,21 @@ class Frame(QWidget):
                 print('Your API key was updated')
 
         if len(s) == 7:
-            # player gets removed from the party (should work)
             if s[1] == 'has' and s[3] == 'removed':
                 self.remove_player(s[0])
-            # the party is empty
             if s[0] == 'You' and s[2] == 'not' and s[6] == 'party':
                 self.disband_party()
 
         if len(s) == 9:
-            # player gets removed from the party (should work)
             if s[1] == 'was' and s[2] == 'removed':
                 self.remove_player(s[0])
 
         if len(s) == 14:
-            # the party gets disbanded (idk if it works)
             if s[1] == 'party' and s[3] == 'disbanded':
                 self.disband_party()
 
         if len(s) > 0:
             if s[0] == "You'll":
-                # You join a party with multiple players in it (works)
                 s2 = last_line.split(':')
                 namelist = []
                 s = s2[3].split()
@@ -770,14 +742,11 @@ class Frame(QWidget):
                 if last_line[-10:] == 'FINAL KILL':
                     for player in self.party_members:
                         if player in last_line:
-                            a = self.party_members.index(
-                                player)
+                            a = self.party_members.index(player)
                             if player != s[0]:
                                 self.party_stats[a][2] += 1
                             else:
                                 self.party_stats[a][3] += 1
-                            print(self.stats_before)
-                            print(self.party_stats)
                             self.print_stats()
                 if last_line[-18:] == 'fell into the void':
                     player = s[0]
@@ -803,18 +772,17 @@ class Frame(QWidget):
                 if self.cd <= time.time() - 8:
                     self.cd = time.time()
                     for i in range(len(self.party_stats)):
-                        self.party_stats[i] = self.get_stats_uuid(
-                            self.party_stats[i][4])
+                        self.party_stats[i] = self.get_stats_uuid(self.party_stats[i][4])
                     self.print_stats()
 
     def closeEvent(self, event):
         self.thread_running = False
         self.logfile_thread.join()
+        self.table_thread.join()
         if self.session_is_started:
             self.end_session()
             self.session_is_over = True
         event.accept()
-        return
 
 
 if __name__ == '__main__':
