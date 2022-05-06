@@ -1,2 +1,2 @@
-# This code is garbage. Please dont download or use it. Thanks!
+# This code is garbage. Please don't download or use it. Thanks!
 
