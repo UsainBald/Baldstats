@@ -10,18 +10,13 @@ from PyQt5.QtWidgets import *
 from threading import Thread
 
 
-class Communicate(QObject):
-    process_logfile_line = pyqtSignal()
-    update_table = pyqtSignal()
-
-
 class Frame(QWidget):
     def __init__(self):
         super().__init__()
         # TODO: API new (for first-time users)
         # TODO: the gui only updates when you switch to the tab
-        # TODO: fix watch_logs (and threading in general)
-        self.bool_debug_is_enabled = False
+        # TODO: session_stats.txt
+        self.bool_debug_is_enabled = True
 
         self.setWindowTitle("BaldStats testing")
         self.setMinimumSize(1000, 600)
@@ -61,8 +56,8 @@ class Frame(QWidget):
         self.tabs.addTab(self.game_stats_tab, "Game stats")
         self.tabs.addTab(self.overlay_stats_tab, "Overlay stats")
         # TODO: less importans tabs
+        self.tabs.setTabEnabled(2, False)
         self.tabs.setTabEnabled(3, False)
-        self.tabs.setTabEnabled(4, False)
 
         self.main_layout.setMenuBar(self.menu_bar)
         self.main_layout.addWidget(self.tabs)
@@ -85,9 +80,9 @@ class Frame(QWidget):
         self.party_members = []
         self.party_stats = []
         self.party_stats_last = []  # for threading and table updating
-        self.log_file = ''
-        self.log_file_last_changed = 0
-        self.current_line = 0
+        self.log_file = '' # path to logfile
+        self.log_file_last_changed = 0 # time when logfile was lastly changed
+        self.logfile_last_line = 0 # last processed logfile line
         self.cd = 0
         self.session_start_time = ''
         self.game_stats = []
@@ -100,7 +95,6 @@ class Frame(QWidget):
         self.client_list = []
         self.mode_remembered = False
         self.session_is_started = False
-        self.last_thread_line = ""
         self.events = []
         self.uuid_dict = {}
 
@@ -118,7 +112,7 @@ class Frame(QWidget):
             print(i)
 
         with open(self.log_file) as f:
-            self.current_line = len(f.readlines())  # finding the last line
+            self.logfile_last_line = len(f.readlines())  # finding the last line
         self.log_file_last_changed = os.stat(self.log_file).st_mtime
 
         self.session_is_over = False
@@ -130,16 +124,16 @@ class Frame(QWidget):
 
         # TODO: fix AttributeError: 'Frame' object has no attribute 'logfile_thread'
         self.thread_running = True
-        self.signal = Communicate()
-        self.signal.process_logfile_line.connect(self.main_cycle)
+
         self.logfile_thread = Thread(target=self.watch_logs)
         self.logfile_thread.start()
 
-        self.table_thread = Thread(target=self.update_table)
+        self.table_thread = Thread(target=self.ui_update_table)
         self.table_thread.start()
 
-    def make_table(self):
+    def ui_make_table(self):
         # filling overall table
+        a = False
         for i in range(len(self.party_stats)):
             self.overall_stats_table.setItem(
                 i, 0, QTableWidgetItem(str(self.party_stats[i][0])))
@@ -192,12 +186,13 @@ class Frame(QWidget):
                 i, 7, QTableWidgetItem(str(self.party_stats[i][6])))
             if len(self.stats_before) == 2 and self.stats_before[1] == 'bebra':
                 self.stats_before = []
+        
 
-    def update_table(self):
-        while True:
+    def ui_update_table(self):
+        while self.thread_running:
             if len(self.party_stats) == len(self.party_stats_last):
                 if self.party_stats != self.party_stats_last:
-                    self.make_table()
+                    self.ui_make_table()
             self.party_stats_last = [i[:] for i in self.party_stats]
             time.sleep(0.1)
 
@@ -330,10 +325,6 @@ class Frame(QWidget):
                 cur_player, self.party_members[i] = self.party_members[i], cur_player
                 cur_stats, self.party_stats[i] = self.party_stats[i], cur_stats
 
-            # GUI table updating:
-            # if pos == -1:
-            #     pos = self.table.rowCount()
-
             # overall table updating
             self.overall_stats_table.insertRow(pos)
             self.overall_stats_table.setItem(
@@ -365,7 +356,7 @@ class Frame(QWidget):
             if self.session_is_started:
                 player_join_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
                 new_player_stats.append(player_join_time)
-                self.stats_before.append(new_player_stats)
+                self.stats_before.append(new_player_stats[:])
 
             print(f'{new_player} was added')
             print(self.party_stats)
@@ -408,9 +399,11 @@ class Frame(QWidget):
             self.overall_stats_table.removeRow(ps_index)
             self.session_stats_table.removeRow(ps_index)
             del self.party_stats[ps_index]
-            for sb_index in self.stats_before:
-                if sb_index[0] == kicked_player:
-                    del sb_index
+            for sb in range(0, len(self.stats_before)):
+                if self.stats_before[sb][0] == kicked_player:
+                    del self.stats_before[sb]
+                    break
+
             print(f"{kicked_player} was removed")
         else:
             print(f'ERROR: {kicked_player} is not in the list')
@@ -424,6 +417,7 @@ class Frame(QWidget):
     def check_client(self):
         if self.bool_debug_is_enabled:
             return "./latest.log"
+            
         client = 0
         edit_last_changed = 0
         for i in self.client_list:
@@ -578,30 +572,27 @@ class Frame(QWidget):
         print(self.stats_before)
 
     def end_session(self):
-        session_end_time = player_leave_time = str(
-            datetime.now())[:10] + '_' + str(datetime.now())[11:16]
-        for sa_player in self.party_stats:
-            kicked_player_stats_after = self.get_stats_uuid(sa_player[4])
-            kicked_player_stats_after.append(player_leave_time)
-            self.stats_after.append(kicked_player_stats_after)
+        session_end_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
         with open(self.stats_file, 'a+') as ss:
             ss.write(f'SESSION STARTED {self.session_start_time}' + '\n')
         for sa in self.stats_after:
-            sa_ign = sa[0]
-            sa_final_kills = sa[2]
-            sa_final_deaths = sa[3]
-            if sa_final_deaths == 0:
-                sa_fkdr = sa_final_kills
+            ign = sa[0]
+            final_kills = sa[2]
+            final_deaths = sa[3]
+            if final_deaths == 0:
+                fkdr = final_kills
             else:
-                sa_fkdr = round(sa_final_kills / sa_final_deaths, 2)
-            sa_level_progress = sa[1]
-            sa_xp_progress = sa[5]
-            sa_join_time = 'nado sdelat'
-            sa_leave_time = sa[6]
+                fkdr = round(final_kills / final_deaths, 2)
+            level_progress = sa[1]
+            xp_progress = sa[5]
+            wins = sa[9]
+            losses = sa[10]
+            join_time = sa[-2]
+            leave_time = sa[-1]
             with open(self.stats_file, 'a+') as ss:
                 ss.write(
-                    f'{sa_ign} {sa_final_kills} {sa_final_deaths} {sa_fkdr} {sa_level_progress} {sa_xp_progress}'
-                    f' {sa_join_time} {sa_leave_time}' + '\n')
+                    f'{ign} {final_kills} {final_deaths} {fkdr} {level_progress} {xp_progress}'
+                    f' {wins} {losses} {join_time} {leave_time}' + '\n')
         with open(self.stats_file, 'a+') as ss:
             ss.write('events: ')
         with open(self.stats_file, 'a+') as ss:
@@ -621,23 +612,21 @@ class Frame(QWidget):
         while not self.session_is_over and self.thread_running:
             if os.stat(self.log_file).st_mtime > self.log_file_last_changed:
                 with open(self.log_file) as f:
-                    length = len(f.readlines())
-                print('logline', length)
-                for line in range(self.current_line, length):
-                    with open(self.log_file) as f:
-                        last_line = f.readlines()[line].strip()
+                    logfile = f.readlines()
+                length = len(logfile)
+                
+                for line in range(self.logfile_last_line, length):
+                    last_line = logfile[line].strip()
                     if last_line[11:31] == '[Client thread/INFO]':
-                        self.current_line = line + 1
-                        self.last_thread_line = last_line
-                        self.signal.process_logfile_line.emit()
+                        self.logfile_last_line = line + 1
+                        self.main_cycle(last_line)
 
                 self.log_file_last_changed = os.stat(self.log_file).st_mtime
 
             else:
                 time.sleep(0.5)
 
-    def main_cycle(self):
-        last_line = self.last_thread_line
+    def main_cycle(self, last_line):
         if last_line[-1] == '.' or last_line[-1] == '!':
             last_line = last_line[:-1]
         s = last_line.split()[4:]
@@ -774,6 +763,7 @@ class Frame(QWidget):
                     for i in range(len(self.party_stats)):
                         self.party_stats[i] = self.get_stats_uuid(self.party_stats[i][4])
                     self.print_stats()
+
 
     def closeEvent(self, event):
         self.thread_running = False
