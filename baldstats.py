@@ -13,17 +13,18 @@ from threading import Thread
 class Frame(QWidget):
     def __init__(self):
         super().__init__()
-        # TODO: API new (for first-time users)
+        # TODO: /api new (for first-time users)
         # TODO: the gui only updates when you switch to the tab
-        # TODO: session_stats.txt
-        self.bool_debug_is_enabled = True
+        # TODO: graphs and tables from session_stats.txt
+        # TODO: less important tabs (game stats, overlay)
+        self.bool_debug_is_enabled = False  # for masochists (Linux users), True - Linux, False - Windows
 
-        self.setWindowTitle("BaldStats testing")
+        self.setWindowTitle("BaldStats Unreleased")
         self.setMinimumSize(1000, 600)
         self.menu_bar = QMenuBar()
         self.settings_menu = QMenu("&Settings", self)
 
-        self.stats_history_menu = QMenu("St&ats history", self)
+        self.stats_history_menu = QMenu("&Stats history", self)
         self.help_menu = QMenu("&Help", self)
         self.menu_bar.addMenu(self.settings_menu)
         self.menu_bar.addMenu(self.stats_history_menu)
@@ -40,23 +41,27 @@ class Frame(QWidget):
 
         self.session_stats_tab_layout = QVBoxLayout(self.session_stats_tab)
         self.overall_stats_tab_layout = QVBoxLayout(self.overall_stats_tab)
+        self.game_stats_tab_layout = QVBoxLayout(self.game_stats_tab)
         self.session_stats_table = QTableWidget()
         self.overall_stats_table = QTableWidget()
+        self.game_stats_table = QTableWidget()
         self.session_stats_tab_layout.addWidget(self.session_stats_table)
         self.overall_stats_tab_layout.addWidget(self.overall_stats_table)
+        self.game_stats_tab_layout.addWidget(self.game_stats_table)
         self.session_stats_table.setColumnCount(8)
         self.overall_stats_table.setColumnCount(9)
+        self.game_stats_table.setColumnCount(8)
         self.session_stats_table.setHorizontalHeaderLabels(
             ["Name", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "Void deaths"])
         self.overall_stats_table.setHorizontalHeaderLabels(
             ["Name", "Stars", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "BBLR"])
+        self.game_stats_table.setHorizontalHeaderLabels(
+            ["Name", "Kills", "Final kills", "Beds broken", "Void deaths"])
 
         self.tabs.addTab(self.session_stats_tab, "Session stats")
         self.tabs.addTab(self.overall_stats_tab, "Overall stats")
         self.tabs.addTab(self.game_stats_tab, "Game stats")
-        self.tabs.addTab(self.overlay_stats_tab, "Overlay stats")
-        # TODO: less importans tabs
-        self.tabs.setTabEnabled(2, False)
+        self.tabs.addTab(self.overlay_stats_tab, "Overlay")
         self.tabs.setTabEnabled(3, False)
 
         self.main_layout.setMenuBar(self.menu_bar)
@@ -68,7 +73,6 @@ class Frame(QWidget):
 
         self.user = (getpass.getuser())
 
-        # BEFORE_COMMIT uncomment
         if self.bool_debug_is_enabled:
             self.cfg_file = f"./settings.cfg"
             self.stats_file = f"./session_stats.txt"
@@ -76,27 +80,27 @@ class Frame(QWidget):
             self.cfg_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/settings.cfg"
             self.stats_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/session_stats.txt"
 
-        # self.API_key = "f57c9f4a-175b-430c-a261-d8c199abd927"
+        # self.API_key = "f57c9f4a-175b-430c-a261-d8c199abd927"  # don't steal my api key pls
         self.party_members = []
         self.party_stats = []
         self.party_stats_last = []  # for threading and table updating
-        self.log_file = '' # path to logfile
-        self.log_file_last_changed = 0 # time when logfile was lastly changed
-        self.logfile_last_line = 0 # last processed logfile line
-        self.cd = 0
+        self.log_file = ''  # a path to the logfile
+        self.log_file_last_changed = 0  # time when logfile was last changed
+        self.logfile_last_line = 0  # last processed logfile line
+        self.cd = 0  # cooldown for the api mode
         self.session_start_time = ''
-        self.game_stats = []
+        self.game_stats = []  # stats of a single game
         self.game_stats_history = []
-        self.stats_before = []
-        self.stats_after = []
+        self.stats_before = []  # stats of players when they join the party
+        self.stats_after = []  # stats of players when they leave the party or when the session ends
         self.API_key = ''
         self.baldstats_mode = ''
-        self.user_ign = ''
-        self.client_list = []
+        self.user_ign = ''  # in-game name of the user
+        self.client_list = []  # list of minecraft clients
         self.mode_remembered = False
         self.session_is_started = False
-        self.events = []
-        self.uuid_dict = {}
+        self.events = []  # list of in-game events (final kills/deaths, bed destructions, etc.)
+        self.uuid_dict = {}  # uuids of every player who joined the party during a session)
 
         if not self.bool_debug_is_enabled and not os.path.exists(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats"):
             os.mkdir(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats")
@@ -116,11 +120,9 @@ class Frame(QWidget):
         self.log_file_last_changed = os.stat(self.log_file).st_mtime
 
         self.session_is_over = False
-        self.party_check = False
+        self.party_check = False        # a bunch of different checks
         self.game_ended_check = False
-        self.party_arr = []
-
-        # self.main_cycle()
+        self.party_arr = []  # for self.party_adjust()
 
         # TODO: fix AttributeError: 'Frame' object has no attribute 'logfile_thread'
         self.thread_running = True
@@ -132,8 +134,6 @@ class Frame(QWidget):
         self.table_thread.start()
 
     def ui_make_table(self):
-        # filling overall table
-        a = False
         for i in range(len(self.party_stats)):
             self.overall_stats_table.setItem(
                 i, 0, QTableWidgetItem(str(self.party_stats[i][0])))
@@ -186,7 +186,6 @@ class Frame(QWidget):
                 i, 7, QTableWidgetItem(str(self.party_stats[i][6])))
             if len(self.stats_before) == 2 and self.stats_before[1] == 'bebra':
                 self.stats_before = []
-        
 
     def ui_update_table(self):
         while self.thread_running:
@@ -195,6 +194,16 @@ class Frame(QWidget):
                     self.ui_make_table()
             self.party_stats_last = [i[:] for i in self.party_stats]
             time.sleep(0.1)
+
+    def ui_reset_game_stats_table(self):
+        self.game_stats_table.clear()
+        self.game_stats_table.setRowCount(len(self.party_stats))
+        self.game_stats_table.setHorizontalHeaderLabels(
+            ["Name", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "Void deaths"])
+        for pos in range(len(self.party_stats)):
+            self.game_stats_table.setItem(pos, 0, QTableWidgetItem(self.party_stats[pos][0]))
+            for i in range(1, 8):
+                self.game_stats_table.setItem(pos, i, QTableWidgetItem("0"))
 
     def ui_show_settings_dialog(self):
         dialog = QDialog()
@@ -214,13 +223,13 @@ class Frame(QWidget):
                 if elem[0] == current_player[0]:
                     ps_index = self.party_stats.index(elem)
             session_bedwars_level = self.party_stats[ps_index][1] - \
-                self.stats_before[sb_index][1]
+                                    self.stats_before[sb_index][1]
             session_exp_progress = self.party_stats[ps_index][5] - \
-                self.stats_before[sb_index][5]
+                                   self.stats_before[sb_index][5]
             session_final_kills = self.party_stats[ps_index][2] - \
-                self.stats_before[sb_index][2]
+                                  self.stats_before[sb_index][2]
             session_final_deaths = self.party_stats[ps_index][3] - \
-                self.stats_before[sb_index][3]
+                                   self.stats_before[sb_index][3]
             if session_final_deaths == 0:
                 session_final_deaths = 1
             print(' ')
@@ -352,6 +361,7 @@ class Frame(QWidget):
 
             for i in range(1, 8):
                 self.session_stats_table.setItem(pos, i, QTableWidgetItem("0"))
+            self.ui_reset_game_stats_table()
 
             if self.session_is_started:
                 player_join_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
@@ -385,13 +395,14 @@ class Frame(QWidget):
         player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
         kicked_player = kicked_player.strip()
         if kicked_player in self.party_members:
+
             elem = []
             for elem in self.party_stats:
                 if elem[0] == kicked_player:
                     ps_index = self.party_stats.index(elem)
                     break
             if self.session_is_started:
-                kicked_player_stats_after = self.create_stats_after(elem)
+                kicked_player_stats_after = self.create_stats_after(self.get_stats_uuid(elem[4]))
                 kicked_player_stats_after.append(self.stats_before[ps_index][-1])
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
@@ -417,7 +428,7 @@ class Frame(QWidget):
     def check_client(self):
         if self.bool_debug_is_enabled:
             return "./latest.log"
-            
+
         client = 0
         edit_last_changed = 0
         for i in self.client_list:
@@ -558,9 +569,11 @@ class Frame(QWidget):
                     self.remove_player(elem)
         self.party_arr = []
 
+    def get_stats_history(self):
+        pass
+
     def start_session(self):
-        self.session_start_time = str(datetime.now())[
-            :10] + '_' + str(datetime.now())[11:16]
+        self.session_start_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
         for elem in self.party_stats:
             bef = [i for i in elem]
             self.game_stats.append(bef)
@@ -573,6 +586,8 @@ class Frame(QWidget):
 
     def end_session(self):
         session_end_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+        for player in self.party_members:
+            self.remove_player(player)
         with open(self.stats_file, 'a+') as ss:
             ss.write(f'SESSION STARTED {self.session_start_time}' + '\n')
         for sa in self.stats_after:
@@ -590,23 +605,24 @@ class Frame(QWidget):
             join_time = sa[-2]
             leave_time = sa[-1]
             with open(self.stats_file, 'a+') as ss:
-                ss.write(
-                    f'{ign} {final_kills} {final_deaths} {fkdr} {level_progress} {xp_progress}'
-                    f' {wins} {losses} {join_time} {leave_time}' + '\n')
+                ss.write(f'{ign} {final_kills} {final_deaths} {fkdr} {level_progress} {xp_progress}'
+                         f' {wins} {losses} {join_time} {leave_time}' + '\n')
         with open(self.stats_file, 'a+') as ss:
             ss.write('events: ')
         with open(self.stats_file, 'a+') as ss:
             for event in self.events:
-                ss.write(f'{event[0]}; {event[1]}; {event[2]}, ')
+                ss.write(f'{event[0]};{event[1]};{event[2]}, ')
+            ss.write('\n')
         with open(self.stats_file, 'a+') as ss:
             ss.write(f'SESSION ENDED {session_end_time}' + '\n')
             ss.write('\n')
 
     def create_event(self, name, event):
         event_time = str(datetime.now())[:10] + \
-            '_' + str(datetime.now())[11:19]
+                     '_' + str(datetime.now())[11:19]
         single_event = [name, event, event_time]
         self.events.append(single_event)
+        print(single_event)
 
     def watch_logs(self):
         while not self.session_is_over and self.thread_running:
@@ -614,7 +630,7 @@ class Frame(QWidget):
                 with open(self.log_file) as f:
                     logfile = f.readlines()
                 length = len(logfile)
-                
+
                 for line in range(self.logfile_last_line, length):
                     last_line = logfile[line].strip()
                     if last_line[11:31] == '[Client thread/INFO]':
@@ -639,6 +655,7 @@ class Frame(QWidget):
         if s == ['Protect', 'your', 'bed', 'and', 'destroy', 'the', 'enemy', 'beds']:
             if not self.session_is_started:
                 self.start_session()
+            self.game_ended_check = False
             self.create_event('event-', 'game_started')
         if self.party_check:
             if len(s) > 0:
@@ -651,7 +668,7 @@ class Frame(QWidget):
         if self.game_ended_check:
             if len(s) > 2:
                 if s[1] == '-':
-                    if s[2][:-1] in self.party_members:
+                    if s[-1] in self.party_members:
                         self.create_event('event-', 'game_won')
                         for pmember in self.party_stats:
                             pmember[9] += 1
@@ -663,8 +680,8 @@ class Frame(QWidget):
         if len(s) > 1:
             if s[0] == 'Party' and s[1] == 'Members':
                 self.party_check = True
-        if len(s) > 0:
-            if s[0] == '????????????????????????????????????????????????????????????????':
+        if len(s) == 2:
+            if s[0] == 'Bed' and s[1] == 'Wars':
                 self.game_ended_check = True
         if len(s) == 4:
             if s[1] == 'joined' and s[3] == 'party':
@@ -734,8 +751,10 @@ class Frame(QWidget):
                             a = self.party_members.index(player)
                             if player != s[0]:
                                 self.party_stats[a][2] += 1
+                                self.create_event(f'{player}', 'final_kill')
                             else:
                                 self.party_stats[a][3] += 1
+                                self.create_event(f'{player}', 'final_death')
                             self.print_stats()
                 if last_line[-18:] == 'fell into the void':
                     player = s[0]
@@ -745,15 +764,14 @@ class Frame(QWidget):
                                 fv_player[6] += 1
                                 self.create_event(f'{player}', 'voided')
                 if len(s) > 1:
-                    if s[0] == 'BED' and s[1] == 'DESTROYED':
-                        player = s[0]
+                    if s[0] == 'BED' and s[1] == 'DESTRUCTION':
+                        player = s[-1]
                         if player in self.party_members:
                             for fv_player in self.party_stats:
                                 if fv_player[0] == player:
                                     fv_player[7] += 1
-                                    self.create_event(
-                                        f'{player}', 'bed_broken')
-                        if 'Your bed' in last_line:
+                                    self.create_event(f'{player}', 'bed_broken')
+                        if 'Your Bed' in last_line:
                             self.create_event(f'{player}', 'bed_lost')
                             for fv_player in self.party_stats:
                                 fv_player[8] += 1
@@ -763,7 +781,6 @@ class Frame(QWidget):
                     for i in range(len(self.party_stats)):
                         self.party_stats[i] = self.get_stats_uuid(self.party_stats[i][4])
                     self.print_stats()
-
 
     def closeEvent(self, event):
         self.thread_running = False
@@ -778,5 +795,5 @@ class Frame(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     frame = Frame()
-    # frame.show()
+    # frame.show()  # denchik eto che za shtuka?
     sys.exit(app.exec_())
