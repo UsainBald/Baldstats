@@ -7,6 +7,7 @@ from datetime import datetime
 import sys
 from PyQt5.QtCore import *
 from PyQt5.QtWidgets import *
+from PyQt5.QtGui import *
 from threading import Thread
 
 
@@ -17,19 +18,20 @@ class Frame(QWidget):
         # TODO: the gui only updates when you switch to the tab
         # TODO: graphs and tables from session_stats.txt
         # TODO: less important tabs (game stats, overlay)
-        self.bool_debug_is_enabled = False  # for masochists (Linux users), True - Linux, False - Windows
+
+        # for masochists (Linux users), True - Linux, False - Windows
+        self.bool_debug_is_enabled = True
+
+        # loading custom font
+        ui_font_db = QFontDatabase()
+        ui_font_db.addApplicationFont("./MinecraftRegular.otf")
+        self.ui_app_font = QFont("Minecraft", 14)
+        self.setFont(self.ui_app_font)
 
         self.setWindowTitle("BaldStats Unreleased")
         self.setMinimumSize(1000, 600)
         self.menu_bar = QMenuBar()
-        self.settings_menu = QMenu("&Settings", self)
-
-        self.stats_history_menu = QMenu("&Stats history", self)
-        self.help_menu = QMenu("&Help", self)
-        self.menu_bar.addMenu(self.settings_menu)
-        self.menu_bar.addMenu(self.stats_history_menu)
-        self.menu_bar.addMenu(self.help_menu)
-        self.menu_bar.setDisabled(True)
+        self.menu_bar.addAction("&Settings", self.ui_show_settings_dialog)
 
         self.main_layout = QVBoxLayout(self)
         self.tabs = QTabWidget()
@@ -45,12 +47,15 @@ class Frame(QWidget):
         self.session_stats_table = QTableWidget()
         self.overall_stats_table = QTableWidget()
         self.game_stats_table = QTableWidget()
+        self.session_stats_table.setFont(self.ui_app_font)
+        self.overall_stats_table.setFont(self.ui_app_font)
+        self.game_stats_table.setFont(self.ui_app_font)
         self.session_stats_tab_layout.addWidget(self.session_stats_table)
         self.overall_stats_tab_layout.addWidget(self.overall_stats_table)
         self.game_stats_tab_layout.addWidget(self.game_stats_table)
         self.session_stats_table.setColumnCount(8)
         self.overall_stats_table.setColumnCount(9)
-        self.game_stats_table.setColumnCount(8)
+        self.game_stats_table.setColumnCount(5)
         self.session_stats_table.setHorizontalHeaderLabels(
             ["Name", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "Void deaths"])
         self.overall_stats_table.setHorizontalHeaderLabels(
@@ -80,6 +85,10 @@ class Frame(QWidget):
             self.cfg_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/settings.cfg"
             self.stats_file = f"C:/Users/{self.user}/Appdata/Roaming/Baldstats/session_stats.txt"
 
+        if not os.path.exists(self.cfg_file):
+            with open(self.cfg_file, 'w'):
+                pass
+
         # self.API_key = "f57c9f4a-175b-430c-a261-d8c199abd927"  # don't steal my api key pls
         self.party_members = []
         self.party_stats = []
@@ -92,31 +101,31 @@ class Frame(QWidget):
         self.game_stats = []  # stats of a single game
         self.game_stats_history = []
         self.stats_before = []  # stats of players when they join the party
-        self.stats_after = []  # stats of players when they leave the party or when the session ends
+        # stats of players when they leave the party or when the session ends
+        self.stats_after = []
         self.API_key = ''
         self.baldstats_mode = ''
         self.user_ign = ''  # in-game name of the user
         self.client_list = []  # list of minecraft clients
         self.mode_remembered = False
         self.session_is_started = False
-        self.events = []  # list of in-game events (final kills/deaths, bed destructions, etc.)
+        # list of in-game events (final kills/deaths, bed destructions, etc.)
+        self.events = []
         self.uuid_dict = {}  # uuids of every player who joined the party during a session)
 
         if not self.bool_debug_is_enabled and not os.path.exists(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats"):
             os.mkdir(f"C:/Users/{self.user}/Appdata/Roaming/Baldstats")
 
-        self.get_api_key()
-        self.get_name()
-        self.get_client()
-        self.choose_mode()
-        self.remember_mode()
+        if not (self.load_settings()):
+            self.ui_show_settings_dialog()
 
         for i in self.party_members:
             print('Current party:')
             print(i)
 
         with open(self.log_file) as f:
-            self.logfile_last_line = len(f.readlines())  # finding the last line
+            self.logfile_last_line = len(
+                f.readlines())  # finding the last line
         self.log_file_last_changed = os.stat(self.log_file).st_mtime
 
         self.session_is_over = False
@@ -201,16 +210,290 @@ class Frame(QWidget):
         self.game_stats_table.setHorizontalHeaderLabels(
             ["Name", "Final kills", "Final deaths", "FKDR", "Wins", "Losses", "WLR", "Void deaths"])
         for pos in range(len(self.party_stats)):
-            self.game_stats_table.setItem(pos, 0, QTableWidgetItem(self.party_stats[pos][0]))
+            self.game_stats_table.setItem(
+                pos, 0, QTableWidgetItem(self.party_stats[pos][0]))
             for i in range(1, 8):
                 self.game_stats_table.setItem(pos, i, QTableWidgetItem("0"))
 
     def ui_show_settings_dialog(self):
         dialog = QDialog()
-        button = QPushButton("Press me!", dialog)
-        dialog.setWindowTitle("Settings dialog")
+        dialog.setFont(self.ui_app_font)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog.setWindowTitle("Settings dialog (not working)")
+
+        def check_api():
+            save_api = apikey_field.text()
+            req_link = f'https://api.hypixel.net/player?key={save_api}'
+
+            if requests.get(req_link).status_code == 403:
+                return False  # TODO: invalid api alert
+
+            print("API CHECK SUCCESSFUL")
+            return True
+
+        def get_nickname():
+            save_api = apikey_field.text()
+            save_nickname = nickname_field.text()
+
+            url = f"https://api.hypixel.net/player?key={save_api}&name={save_nickname}"
+            req = requests.get(url).json()
+            cn_player = req.get('player')
+            if cn_player is not None:
+                check = self.get_bw_stats(cn_player)
+                print("NICKNAME CHECK SUCCESSFUL")
+                return [check[0], check[4]]
+            else:
+                if req.get('cause') == "You have already looked up this name recently":
+                    print('API request error, try again in a moment')
+                else:
+                    print(
+                        f'ERROR: no player by the name of {save_nickname} found')
+                return False
+
+        def get_mode():
+            if (mode_remember.isChecked()):
+                if (mode_radio_1.isChecked()):
+                    print("GAME MODE CHECK SUCCESSFUL")
+                    return "log_file"
+                elif (mode_radio_2.isChecked()):
+                    print("GAME MODE CHECK SUCCESSFUL")
+                    return "api"
+                else:
+                    return False
+            else:
+                if (mode_radio_1.isChecked()):
+                    print("GAME MODE CHECK SUCCESSFUL")
+                    self.baldstats_mode = "log_file"
+                elif (mode_radio_2.isChecked()):
+                    print("GAME MODE CHECK SUCCESSFUL")
+                    self.baldstats_mode = "api"
+                else: return False
+                return ''
+
+        def browse_client():
+            filedlg = QFileDialog(dialog)
+            path = filedlg.getOpenFileName(
+                dialog, "Specify a path to the logfile", "D:/")
+            path = path[0]
+            print(path)
+            if (path != ''):
+                launcher_path.setText(path)
+
+        def check_client():
+            client_list = [
+                f"C:/Users/{self.user}/.lunarclient/offline/1.8/logs/latest.log",
+                f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/latest.log",
+                f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/blclient/chat/latest.log",
+                f"C:/Users/{self.user}/AppData/.pvplounge/logs/latest.log"
+            ]
+            client_names = ["Lunar Client", "Official Launcher",
+                            "Badlion Client", "PVPLounge Client"]
+            path = launcher_path.text()
+            for i in range(0, len(client_list)):
+                if (path == client_list[i]):
+                    launcher_indicator.setText("Linked to " + client_names[i])
+                    launcher_indicator.setStyleSheet("color: green")
+                    return True
+
+            else:
+                if (len(path) > 9 and path[-10:] == "latest.log" and os.path.exists(path)):
+                    launcher_indicator.setText("Linked to custom client")
+                    launcher_indicator.setStyleSheet("color: green")
+                    return True
+
+                else:
+                    launcher_indicator.setText("Check path")
+                    launcher_indicator.setStyleSheet("color: red")
+                    return False
+
+        def detect_client():
+            client_list = [
+                f"C:/Users/{self.user}/.lunarclient/offline/1.8/logs/latest.log",
+                f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/latest.log",
+                f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/blclient/chat/latest.log",
+                f"C:/Users/{self.user}/AppData/.pvplounge/logs/latest.log"
+            ]
+
+            latest_changed = -1
+            client = -1
+            for i in range(0, len(client_list)):
+                if (os.path.exists(client_list[i]) and os.stat(client_list[i]).st_mtime > latest_changed):
+                    latest_changed = os.stat(client_list[i]).st_mtime
+                    client = i
+            
+            if (client != -1):
+                launcher_path.setText(client_list[client])
+            else:
+                pass # TODO: no minecraft installed
+
+        def load_data():
+            nickname_field.setText(self.user_ign)
+            apikey_field.setText(self.API_key)
+            launcher_path.setText(self.log_file)
+            if (self.baldstats_mode == "log_file"):
+                mode_remember.setChecked(True)
+                mode_radio_1.setChecked(True)
+            elif (self.baldstats_mode == "api"):
+                mode_remember.setChecked(True)
+                mode_radio_2.setchecked(True)
+
+        def save_data():
+            apikey_label.setStyleSheet("color: black")
+            nickname_label.setStyleSheet("color: black")
+            mode_label.setStyleSheet("color: black")
+
+            save_api = ''
+            save_name = ''
+            save_uuid = ''
+            save_path = ''
+            save_mode = ''
+
+            if (check_api()):
+                apikey_label.setStyleSheet("color: green")
+                save_api = apikey_field.text()
+            else:
+                apikey_label.setStyleSheet("color: red")
+                return False
+
+            a = get_nickname()
+            if (not a):
+                nickname_label.setStyleSheet("color: red")
+                return False
+            nickname_label.setStyleSheet("color: green")
+            save_name = a[0]
+            save_uuid = a[1]
+
+            a = get_mode()
+            if (a == False):
+                mode_label.setStyleSheet("color: red")
+                return False
+            mode_label.setStyleSheet("color: green")
+            save_mode = a
+
+            if (not check_client()):
+                return False
+            
+            save_path = launcher_path.text()
+
+            towrite = [
+                "API_key=" + save_api + '\n',
+                "Name=" + save_name + '=' + save_uuid + '\n',
+                "logfile_path=" + save_path + '\n'
+            ]
+            if (save_mode):
+                towrite.append("remember_mode=" + save_mode + '\n')
+
+            with open(self.cfg_file, 'w') as cfg:
+                cfg.writelines(towrite)
+
+            self.load_settings()
+            dialog.close()
+            return True
+
+        nickname_layout = QHBoxLayout()
+        nickname_label = QLabel("Your nickname:")
+        nickname_field = QLineEdit()
+        nickname_layout.addWidget(nickname_label)
+        nickname_layout.addWidget(nickname_field)
+
+        apikey_layout = QHBoxLayout()
+        apikey_label = QLabel("Your API key:")
+        apikey_field = QLineEdit()
+        apikey_layout.addWidget(apikey_label)
+        apikey_layout.addWidget(apikey_field)
+
+        launcher_layout = QVBoxLayout()
+        launcher_field_layout = QHBoxLayout()
+        launcher_buttons_layout = QHBoxLayout()
+        launcher_label = QLabel("Path to your minecraft launcher:")
+        launcher_path = QLineEdit()
+        launcher_indicator = QLabel("no data")
+        launcher_detect_button = QPushButton("Detect launcher")
+        launcher_specifypath_button = QPushButton("Browse...")
+        launcher_field_layout.addWidget(launcher_label)
+        launcher_field_layout.addWidget(launcher_path)
+        launcher_buttons_layout.addWidget(launcher_indicator)
+        launcher_buttons_layout.addWidget(launcher_detect_button)
+        launcher_buttons_layout.addWidget(launcher_specifypath_button)
+        launcher_layout.addLayout(launcher_field_layout)
+        launcher_layout.addLayout(launcher_buttons_layout)
+
+        mode_layout = QHBoxLayout()
+        mode_radio_layout = QVBoxLayout()
+        mode_label = QLabel("Mode")
+        mode_radio_1 = QRadioButton("Logfile")
+        mode_radio_2 = QRadioButton("API requests")
+        mode_remember = QCheckBox("Remember selection")
+        mode_radio_layout.addWidget(mode_label)
+        mode_radio_layout.addWidget(mode_radio_1)
+        mode_radio_layout.addWidget(mode_radio_2)
+        mode_layout.addLayout(mode_radio_layout)
+        mode_layout.addWidget(mode_remember)
+
+        okcancel_layout = QHBoxLayout()
+        ok_button = QPushButton("Ok")
+        cancel_button = QPushButton("Cancel")
+        okcancel_layout.addWidget(ok_button)
+        okcancel_layout.addWidget(cancel_button)
+
+        dialog_layout.addLayout(nickname_layout)
+        dialog_layout.addLayout(apikey_layout)
+        dialog_layout.addLayout(launcher_layout)
+        dialog_layout.addLayout(mode_layout)
+        dialog_layout.addLayout(okcancel_layout)
+
+        launcher_path.textChanged.connect(check_client)
+        launcher_detect_button.clicked.connect(detect_client)
+        launcher_specifypath_button.clicked.connect(browse_client)
+        ok_button.clicked.connect(save_data)
+        cancel_button.clicked.connect(exit)
+
+        load_data()
+
         dialog.setWindowModality(Qt.ApplicationModal)
         dialog.exec_()
+
+    def load_settings(self):
+        with open(self.cfg_file, 'r') as cfg:
+            cfglist = cfg.readlines()
+
+        check = [False, False, False, False]
+
+        for i in cfglist:
+            i = i.rstrip().split('=')
+
+            if i[0] == 'API_key':
+                self.API_key = i[1]
+                check[0] = True
+
+            elif i[0] == 'Name':
+                self.add_player(i[2])
+                if self.party_stats == [None]:
+                    print(
+                        f'ERROR: Unable to get stats of {i[1]}, try restarting the program')
+                else:
+                    self.user_ign = self.party_members[0]
+                check[1] = True
+
+            elif i[0] == 'remember_mode':
+                if i[1] == 'log_file':
+                    self.baldstats_mode = 'log_file'
+                elif i[1] == 'api':
+                    self.baldstats_mode = 'api'
+                check[2] = True
+
+            elif i[0] == 'logfile_path':
+                self.log_file = i[1]
+                check[3] = True
+
+        if (not check[0] and check[1] and check[2] and check[3]): return False
+
+        req_link = f'https://api.hypixel.net/player?key={self.API_key}'
+        if requests.get(req_link).status_code == 403:
+            self.API_key = ''
+            return False  # TODO: invalid api alert
+
+        return True
 
     def print_stats(self):  # nado ubrat' kogda gui budet
         for current_player in self.party_stats:
@@ -223,13 +506,13 @@ class Frame(QWidget):
                 if elem[0] == current_player[0]:
                     ps_index = self.party_stats.index(elem)
             session_bedwars_level = self.party_stats[ps_index][1] - \
-                                    self.stats_before[sb_index][1]
+                self.stats_before[sb_index][1]
             session_exp_progress = self.party_stats[ps_index][5] - \
-                                   self.stats_before[sb_index][5]
+                self.stats_before[sb_index][5]
             session_final_kills = self.party_stats[ps_index][2] - \
-                                  self.stats_before[sb_index][2]
+                self.stats_before[sb_index][2]
             session_final_deaths = self.party_stats[ps_index][3] - \
-                                   self.stats_before[sb_index][3]
+                self.stats_before[sb_index][3]
             if session_final_deaths == 0:
                 session_final_deaths = 1
             print(' ')
@@ -241,19 +524,6 @@ class Frame(QWidget):
             print(f"{session_displayname}'s fkdr =", round(
                 session_final_kills / session_final_deaths, 2))
             print(f"{session_displayname}'s final kills =", session_final_kills)
-
-    def check_name(self, ign):
-        url = f"https://api.hypixel.net/player?key={self.API_key}&name={ign}"
-        req = requests.get(url).json()
-        cn_player = req.get('player')
-        if cn_player is not None:
-            return self.get_bw_stats(cn_player)
-        else:
-            if req.get('cause') == "You have already looked up this name recently":
-                print('API request error, try again in a moment')
-            else:
-                print(f'ERROR: no player by the name of {ign} found')
-            return ""
 
     def get_bw_stats(self, req_player):
         req_displayname = req_player.get('displayname')
@@ -357,14 +627,16 @@ class Frame(QWidget):
 
             # session table updating
             self.session_stats_table.insertRow(pos)
-            self.session_stats_table.setItem(pos, 0, QTableWidgetItem(new_player_stats[0]))
+            self.session_stats_table.setItem(
+                pos, 0, QTableWidgetItem(new_player_stats[0]))
 
             for i in range(1, 8):
                 self.session_stats_table.setItem(pos, i, QTableWidgetItem("0"))
             self.ui_reset_game_stats_table()
 
             if self.session_is_started:
-                player_join_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+                player_join_time = str(datetime.now())[
+                    :10] + '_' + str(datetime.now())[11:16]
                 new_player_stats.append(player_join_time)
                 self.stats_before.append(new_player_stats[:])
 
@@ -392,7 +664,8 @@ class Frame(QWidget):
 
     def remove_player(self, kicked_player):
         ps_index = 'wrong index'
-        player_leave_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+        player_leave_time = str(datetime.now())[
+            :10] + '_' + str(datetime.now())[11:16]
         kicked_player = kicked_player.strip()
         if kicked_player in self.party_members:
 
@@ -402,8 +675,10 @@ class Frame(QWidget):
                     ps_index = self.party_stats.index(elem)
                     break
             if self.session_is_started:
-                kicked_player_stats_after = self.create_stats_after(self.get_stats_uuid(elem[4]))
-                kicked_player_stats_after.append(self.stats_before[ps_index][-1])
+                kicked_player_stats_after = self.create_stats_after(
+                    self.get_stats_uuid(elem[4]))
+                kicked_player_stats_after.append(
+                    self.stats_before[ps_index][-1])
                 kicked_player_stats_after.append(player_leave_time)
                 self.stats_after.append(kicked_player_stats_after)
 
@@ -425,136 +700,6 @@ class Frame(QWidget):
                 self.remove_player(sa_player)
         self.party_members = [self.user_ign]
 
-    def check_client(self):
-        if self.bool_debug_is_enabled:
-            return "./latest.log"
-
-        client = 0
-        edit_last_changed = 0
-        for i in self.client_list:
-            if os.path.exists(i):
-                if os.stat(i).st_mtime > edit_last_changed:
-                    edit_last_changed = os.stat(i).st_mtime
-                    client = i
-        if client != 0:
-            return client
-        else:
-            print("You don't have minecraft installed")
-
-    def choose_mode(self):
-        self.baldstats_mode = False
-        self.mode_remembered = False
-        if os.path.exists(self.cfg_file):
-            with open(self.cfg_file) as cfg:
-                for cfg_line in cfg:
-                    s = cfg_line.split('=')
-                    if s[0] == 'remember_mode':
-                        self.mode_remembered = True
-                        if s[1].strip() == 'log_file':
-                            self.baldstats_mode = 'log_file'
-                        elif s[1].strip() == 'api':
-                            self.baldstats_mode = 'api'
-        if not self.baldstats_mode:
-            print('CHOOSE BALDSTATS MODE')
-            print(
-                'Type 1 to get stats from the log file (updates in real time, unable to track stats of nicked players)')
-            print('Type 2 to get stats from the API (updates once every 30 seconds, tracks stats of nicked players)')
-            m = int(input())
-            if m == 1:
-                self.baldstats_mode = 'log_file'
-            elif m == 2:
-                self.baldstats_mode = 'api'
-            else:
-                raise SystemError
-
-    def remember_mode(self):
-        if not self.mode_remembered:
-            print('Do you want to remember your choice?')
-            print('y - yes')
-            print('n - no')
-            m = input()
-            if m == 'y':
-                with open(self.cfg_file, 'a+') as cfg:
-                    cfg.write(
-                        f'remember_mode={self.baldstats_mode}' + '\n')
-
-    def get_api_key(self):
-        apikey = False
-        api_key_check = False
-        if os.path.exists(self.cfg_file):
-            with open(self.cfg_file) as cfg:
-                for cfg_line in cfg:
-                    s = cfg_line.split('=')
-                    if s[0] == 'API_key':
-                        self.API_key = s[1].strip()
-                        while not apikey:
-                            req_link = f'https://api.hypixel.net/player?key={self.API_key}'
-                            if requests.get(req_link) == '<Response [403]>':
-                                print('Invalid API key, try again')
-                                self.API_key = input()
-                            else:
-                                apikey = True
-        if not apikey:
-            print('Enter your hypixel API key (you can get it by using /api new on the server)')
-            while not api_key_check:
-                self.API_key = input()
-                req_link = f'https://api.hypixel.net/player?key={self.API_key}&uuid=1eb4482cf46248baba0efa3382da4de2'
-                if requests.get(req_link).json().get('player') is None:
-                    print('Invalid API key, try again')
-                else:
-                    with open(self.cfg_file, 'a+') as cfg:
-                        cfg.write(f'API_key={self.API_key}' + '\n')
-                    api_key_check = True
-
-    def get_name(self):
-        if os.path.exists(self.cfg_file):
-            with open(self.cfg_file) as cfg:
-                ign_entered = False
-                for cfg_line in cfg:
-                    s = cfg_line.split('=')
-                    if s[0] == 'Name':
-                        ign_entered = True
-        while not ign_entered:
-            ign = input('Enter your minecraft nickname' + '\n')
-            a = self.check_name(ign)
-            if a != "":
-                ign = a[0]
-                uuid = a[4]
-                with open(self.cfg_file, 'a+') as cfg:
-                    cfg.write(f'Name={ign}={uuid}' + '\n')
-                    ign_entered = True
-
-        with open(self.cfg_file) as cfg:
-            for cfg_line in cfg:
-                s = cfg_line.split('=')
-                if s[0] == 'Name':
-                    self.add_player(s[2].strip())
-                    if self.party_stats == [None]:
-                        print(f'ERROR: Unable to get stats of {s[1].strip()}, try restarting the program')
-                    else:
-                        self.user_ign = self.party_members[0]
-
-    def get_client(self):
-        lunar_client = f"C:/Users/{self.user}/.lunarclient/offline/1.8/logs/latest.log"
-        minecraft_client = f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/latest.log"
-        badlion_client = f"C:/Users/{self.user}/AppData/Roaming/.minecraft/logs/blclient/chat/latest.log"
-        pvplounge_client = f"C:/Users/{self.user}/AppData/.pvplounge/logs/latest.log"
-
-        self.client_list = [lunar_client, minecraft_client,
-                            badlion_client, pvplounge_client]
-        self.log_file = self.check_client()
-
-        if self.log_file == badlion_client:
-            print('Linked to Badlion Client')
-        elif self.log_file == minecraft_client:
-            print('Linked to the Official Launcher')
-        elif self.log_file == lunar_client:
-            print('Linked to Lunar Client')
-        elif self.log_file == pvplounge_client:
-            print('Linked to PVPLounge Client')
-        else:
-            print("Linked to custom client")
-
     def party_adjust(self, party_array):
         adj_party_members = []
         for i in range(len(party_array)):
@@ -573,7 +718,8 @@ class Frame(QWidget):
         pass
 
     def start_session(self):
-        self.session_start_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+        self.session_start_time = str(datetime.now())[
+            :10] + '_' + str(datetime.now())[11:16]
         for elem in self.party_stats:
             bef = [i for i in elem]
             self.game_stats.append(bef)
@@ -585,7 +731,8 @@ class Frame(QWidget):
         print(self.stats_before)
 
     def end_session(self):
-        session_end_time = str(datetime.now())[:10] + '_' + str(datetime.now())[11:16]
+        session_end_time = str(datetime.now())[
+            :10] + '_' + str(datetime.now())[11:16]
         for player in self.party_members:
             self.remove_player(player)
         with open(self.stats_file, 'a+') as ss:
@@ -619,7 +766,7 @@ class Frame(QWidget):
 
     def create_event(self, name, event):
         event_time = str(datetime.now())[:10] + \
-                     '_' + str(datetime.now())[11:19]
+            '_' + str(datetime.now())[11:19]
         single_event = [name, event, event_time]
         self.events.append(single_event)
         print(single_event)
@@ -770,7 +917,8 @@ class Frame(QWidget):
                             for fv_player in self.party_stats:
                                 if fv_player[0] == player:
                                     fv_player[7] += 1
-                                    self.create_event(f'{player}', 'bed_broken')
+                                    self.create_event(
+                                        f'{player}', 'bed_broken')
                         if 'Your Bed' in last_line:
                             self.create_event(f'{player}', 'bed_lost')
                             for fv_player in self.party_stats:
@@ -779,13 +927,14 @@ class Frame(QWidget):
                 if self.cd <= time.time() - 8:
                     self.cd = time.time()
                     for i in range(len(self.party_stats)):
-                        self.party_stats[i] = self.get_stats_uuid(self.party_stats[i][4])
+                        self.party_stats[i] = self.get_stats_uuid(
+                            self.party_stats[i][4])
                     self.print_stats()
 
     def closeEvent(self, event):
         self.thread_running = False
-        self.logfile_thread.join()
-        self.table_thread.join()
+        # self.logfile_thread.join()
+        # self.table_thread.join()
         if self.session_is_started:
             self.end_session()
             self.session_is_over = True
