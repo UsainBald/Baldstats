@@ -13,12 +13,12 @@ from threading import Thread
 class Frame(QWidget):
     def __init__(self):
         super().__init__()
-        # TODO: /api new (for first-time users)
-        # TODO: the gui only updates when you switch to the tab
+        # TODO: /api new for first-time users (low-priority)
+        # TODO: the gui only updates when you switch to the tab (only an issue in Windows for some reason)
         # TODO: graphs and tables from session_stats.txt
-        # TODO: overlay
+        # TODO: overlay (probably never)
 
-        self.bool_debug_is_enabled = True # for masochists (Linux users), True - Linux, False - Windows
+        self.bool_debug_is_enabled = False  # for masochists (Linux users), True - Linux, False - Windows
 
         # loading custom font
         ui_font_db = QFontDatabase()
@@ -122,8 +122,7 @@ class Frame(QWidget):
             print(i)
 
         with open(self.log_file) as f:
-            self.logfile_last_line = len(
-                f.readlines())  # finding the last line
+            self.logfile_last_line = len( f.readlines())  # finding the last line
         self.log_file_last_changed = os.stat(self.log_file).st_mtime
 
         self.session_is_over = False
@@ -225,7 +224,7 @@ class Frame(QWidget):
         dialog = QDialog()
         dialog.setFont(self.ui_app_font)
         dialog_layout = QVBoxLayout(dialog)
-        dialog.setWindowTitle("Settings dialog (not working)")
+        dialog.setWindowTitle("Settings")
 
         def check_api():
             save_api = apikey_field.text()
@@ -257,23 +256,24 @@ class Frame(QWidget):
                 return False
 
         def get_mode():
-            if (mode_remember.isChecked()):
-                if (mode_radio_1.isChecked()):
+            if mode_remember.isChecked():
+                if mode_radio_1.isChecked():
                     print("GAME MODE CHECK SUCCESSFUL")
                     return "log_file"
-                elif (mode_radio_2.isChecked()):
+                elif mode_radio_2.isChecked():
                     print("GAME MODE CHECK SUCCESSFUL")
                     return "api"
                 else:
                     return False
             else:
-                if (mode_radio_1.isChecked()):
+                if mode_radio_1.isChecked():
                     print("GAME MODE CHECK SUCCESSFUL")
                     self.baldstats_mode = "log_file"
-                elif (mode_radio_2.isChecked()):
+                elif mode_radio_2.isChecked():
                     print("GAME MODE CHECK SUCCESSFUL")
                     self.baldstats_mode = "api"
-                else: return False
+                else:
+                    return False
                 return ''
 
         def browse_client():
@@ -282,7 +282,7 @@ class Frame(QWidget):
                 dialog, "Specify a path to the logfile", "D:/")
             path = path[0]
             print(path)
-            if (path != ''):
+            if path != '':
                 launcher_path.setText(path)
 
         def check_client():
@@ -296,13 +296,13 @@ class Frame(QWidget):
                             "Badlion Client", "PVPLounge Client"]
             path = launcher_path.text()
             for i in range(0, len(client_list)):
-                if (path == client_list[i]):
+                if path == client_list[i]:
                     launcher_indicator.setText("Linked to " + client_names[i])
                     launcher_indicator.setStyleSheet("color: green")
                     return True
 
             else:
-                if (len(path) > 9 and path[-10:] == "latest.log" and os.path.exists(path)):
+                if len(path) > 9 and path[-10:] == "latest.log" and os.path.exists(path):
                     launcher_indicator.setText("Linked to custom client")
                     launcher_indicator.setStyleSheet("color: green")
                     return True
@@ -323,23 +323,23 @@ class Frame(QWidget):
             latest_changed = -1
             client = -1
             for i in range(0, len(client_list)):
-                if (os.path.exists(client_list[i]) and os.stat(client_list[i]).st_mtime > latest_changed):
+                if os.path.exists(client_list[i]) and os.stat(client_list[i]).st_mtime > latest_changed:
                     latest_changed = os.stat(client_list[i]).st_mtime
                     client = i
-            
-            if (client != -1):
+
+            if client != -1:
                 launcher_path.setText(client_list[client])
             else:
-                pass # TODO: no minecraft installed
+                pass  # TODO: no minecraft installed
 
         def load_data():
             nickname_field.setText(self.user_ign)
             apikey_field.setText(self.API_key)
             launcher_path.setText(self.log_file)
-            if (self.baldstats_mode == "log_file"):
+            if self.baldstats_mode == "log_file":
                 mode_remember.setChecked(True)
                 mode_radio_1.setChecked(True)
-            elif (self.baldstats_mode == "api"):
+            elif self.baldstats_mode == "api":
                 mode_remember.setChecked(True)
                 mode_radio_2.setchecked(True)
 
@@ -354,7 +354,7 @@ class Frame(QWidget):
             save_path = ''
             save_mode = ''
 
-            if (check_api()):
+            if check_api():
                 apikey_label.setStyleSheet("color: green")
                 save_api = apikey_field.text()
             else:
@@ -362,7 +362,7 @@ class Frame(QWidget):
                 return False
 
             a = get_nickname()
-            if (not a):
+            if not a:
                 nickname_label.setStyleSheet("color: red")
                 return False
             nickname_label.setStyleSheet("color: green")
@@ -370,15 +370,15 @@ class Frame(QWidget):
             save_uuid = a[1]
 
             a = get_mode()
-            if (a == False):
+            if a == False:
                 mode_label.setStyleSheet("color: red")
                 return False
             mode_label.setStyleSheet("color: green")
             save_mode = a
 
-            if (not check_client()):
+            if not check_client():
                 return False
-            
+
             save_path = launcher_path.text()
 
             towrite = [
@@ -386,7 +386,7 @@ class Frame(QWidget):
                 "Name=" + save_name + '=' + save_uuid + '\n',
                 "logfile_path=" + save_path + '\n'
             ]
-            if (save_mode):
+            if save_mode:
                 towrite.append("remember_mode=" + save_mode + '\n')
 
             with open(self.cfg_file, 'w') as cfg:
@@ -411,7 +411,7 @@ class Frame(QWidget):
         launcher_layout = QVBoxLayout()
         launcher_field_layout = QHBoxLayout()
         launcher_buttons_layout = QHBoxLayout()
-        launcher_label = QLabel("Path to your minecraft launcher:")
+        launcher_label = QLabel("Path to minecraft logs:")
         launcher_path = QLineEdit()
         launcher_indicator = QLabel("no data")
         launcher_detect_button = QPushButton("Detect launcher")
@@ -452,7 +452,7 @@ class Frame(QWidget):
         launcher_detect_button.clicked.connect(detect_client)
         launcher_specifypath_button.clicked.connect(browse_client)
         ok_button.clicked.connect(save_data)
-        cancel_button.clicked.connect(exit)
+        cancel_button.clicked.connect(dialog.close)
 
         load_data()
 
@@ -481,7 +481,7 @@ class Frame(QWidget):
                     self.user_ign = self.party_members[0]
                 check[1] = True
 
-            elif i[0] == 'remember_mode':
+            elif i[0] == 'Baldstats_mode':
                 if i[1] == 'log_file':
                     self.baldstats_mode = 'log_file'
                 elif i[1] == 'api':
@@ -491,8 +491,9 @@ class Frame(QWidget):
             elif i[0] == 'logfile_path':
                 self.log_file = i[1]
                 check[3] = True
+            print(check)
 
-        if (not check[0] and check[1] and check[2] and check[3]): return False
+        if not (check[0] and check[1] and check[2] and check[3]): return False
 
         req_link = f'https://api.hypixel.net/player?key={self.API_key}'
         if requests.get(req_link).status_code == 403:
